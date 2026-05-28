@@ -1,0 +1,17 @@
+import { PrismaService } from '../common/prisma.service';
+export declare class TenantsService {
+    private prisma;
+    constructor(prisma: PrismaService);
+    findAll(): import("@prisma/client").Prisma.PrismaPromise<{
+        id: string;
+        slug: string;
+        name: string;
+        logoUrl: string | null;
+        primaryColor: string;
+        secondaryColor: string;
+        domain: string | null;
+        active: boolean;
+        createdAt: Date;
+        updatedAt: Date;
+    }[]>;
+}

@@ -1,0 +1,5 @@
+-- CreateEnum
+CREATE TYPE "EmployeeRoleType" AS ENUM ('PROFESSOR', 'AUXILIAR', 'ORIENTADOR', 'DIRETOR', 'COORDENADOR', 'SECRETARIA', 'SERVICOS_GERAIS');
+
+-- AlterTable
+ALTER TABLE "Employee" ADD COLUMN     "roleType" "EmployeeRoleType" NOT NULL DEFAULT 'PROFESSOR';
