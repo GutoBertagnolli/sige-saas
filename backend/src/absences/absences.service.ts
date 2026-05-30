@@ -8,7 +8,12 @@ export class AbsencesService {
   findAll() {
     return this.prisma.absence.findMany({
       include: {
-        employee: true,
+        employee: {
+          include: {
+            school: true,
+          },
+        },
+        substitutions: true,
       },
       orderBy: {
         startDate: 'desc',
@@ -20,7 +25,11 @@ export class AbsencesService {
     return this.prisma.absence.create({
       data,
       include: {
-        employee: true,
+        employee: {
+          include: {
+            school: true,
+          },
+        },
       },
     });
   }
@@ -30,44 +39,84 @@ export class AbsencesService {
       where: { id },
       data,
       include: {
-        employee: true,
-      },
-    });
-  }
-
-  remove(id: string) {
-    return this.prisma.absence.delete({
-      where: { id },
-    });
-  }
-async getReplacementSuggestions(absenceId: string) {
-  const absence = await this.prisma.absence.findUnique({
-    where: { id: absenceId },
-    include: {
-      employee: {
-        include: {
-          weeklySchedules: {
-            include: {
-              timeSlot: true,
-            },
+        employee: {
+          include: {
+            school: true,
           },
-          school: true,
         },
       },
-    },
-  });
-
-  if (!absence) {
-    return [];
+    });
   }
 
-  const employee = absence.employee;
+  async remove(id: string) {
+    return this.prisma.$transaction(async (transaction) => {
+      await transaction.substitution.deleteMany({
+        where: {
+          absenceId: id,
+        },
+      });
 
-  const suggestions = [];
+      return transaction.absence.delete({
+        where: { id },
+      });
+    });
+  }
 
-  for (const schedule of employee.weeklySchedules) {
-    const availableEmployees =
-      await this.prisma.employee.findMany({
+  async getReplacementSuggestions(absenceId: string) {
+    const absence = await this.prisma.absence.findUnique({
+      where: { id: absenceId },
+      include: {
+        employee: {
+          include: {
+            weeklySchedules: {
+              where: {
+                active: true,
+                requiresSubstitution: true,
+              },
+              include: {
+                class: true,
+                timeSlot: true,
+              },
+              orderBy: [
+                { weekday: 'asc' },
+                { timeSlot: { slotOrder: 'asc' } },
+              ],
+            },
+            school: true,
+          },
+        },
+      },
+    });
+
+    if (!absence) {
+      return [];
+    }
+
+    const employee = absence.employee;
+
+    if (!employee.schoolId) {
+      return [];
+    }
+
+    const suggestions = [];
+
+    for (const schedule of employee.weeklySchedules) {
+      const classSchedule = schedule.classId
+        ? await this.prisma.classSchedule.findFirst({
+            where: {
+              classId: schedule.classId,
+              weekday: schedule.weekday,
+              timeSlotId: schedule.timeSlotId,
+              teacherId: employee.id,
+              isActive: true,
+            },
+            include: {
+              class: true,
+            },
+          })
+        : null;
+
+      const availableEmployees = await this.prisma.employee.findMany({
         where: {
           schoolId: employee.schoolId,
           id: {
@@ -78,6 +127,7 @@ async getReplacementSuggestions(absenceId: string) {
         include: {
           weeklySchedules: {
             where: {
+              active: true,
               weekday: schedule.weekday,
               timeSlotId: schedule.timeSlotId,
             },
@@ -85,57 +135,55 @@ async getReplacementSuggestions(absenceId: string) {
         },
       });
 
-    const ranked = availableEmployees.map((candidate) => {
-      const slot = candidate.weeklySchedules[0];
+      const ranked = availableEmployees
+        .map((candidate) => {
+          const slot = candidate.weeklySchedules[0];
 
-      let priority = 99;
-      let reason = 'Indisponível';
+          let priority = 99;
+          let reason = 'Indisponível neste horário';
 
-      if (!slot && candidate.roleType === 'PROFESSOR') {
-        priority = 2;
-        reason = 'Professor livre';
-      }
+          if (slot?.type === 'HORA_ATIVIDADE') {
+            priority = 1;
+            reason = 'Hora atividade';
+          } else if (!slot && candidate.roleType === 'PROFESSOR') {
+            priority = 2;
+            reason = 'Professor livre';
+          } else if (!slot && candidate.roleType === 'AUXILIAR') {
+            priority = 3;
+            reason = 'Auxiliar disponível';
+          } else if (!slot && candidate.roleType === 'ORIENTADOR') {
+            priority = 4;
+            reason = 'Orientador fallback';
+          } else if (!slot && candidate.roleType === 'DIRETOR') {
+            priority = 5;
+            reason = 'Diretor fallback';
+          } else if (!slot) {
+            priority = 6;
+            reason = 'Servidor livre';
+          }
 
-      if (
-        slot?.type === 'HORA_ATIVIDADE'
-      ) {
-        priority = 1;
-        reason = 'Hora atividade';
-      }
+          return {
+            employeeId: candidate.id,
+            name: candidate.name,
+            roleType: candidate.roleType,
+            priority,
+            reason,
+          };
+        })
+        .filter((candidate) => candidate.priority < 99)
+        .sort((a, b) => a.priority - b.priority);
 
-      if (!slot && candidate.roleType === 'AUXILIAR') {
-        priority = 3;
-        reason = 'Auxiliar disponível';
-      }
+      suggestions.push({
+        absenceId: absence.id,
+        originalTeacherId: employee.id,
+        weekday: schedule.weekday,
+        classScheduleId: classSchedule?.id ?? null,
+        className: classSchedule?.class?.name ?? schedule.class?.name ?? null,
+        timeSlot: schedule.timeSlot,
+        replacements: ranked.slice(0, 5),
+      });
+    }
 
-      if (!slot && candidate.roleType === 'ORIENTADOR') {
-        priority = 4;
-        reason = 'Orientador fallback';
-      }
-
-      if (!slot && candidate.roleType === 'DIRETOR') {
-        priority = 5;
-        reason = 'Diretor fallback';
-      }
-
-      return {
-        employeeId: candidate.id,
-        name: candidate.name,
-        roleType: candidate.roleType,
-        priority,
-        reason,
-      };
-    });
-
-    ranked.sort((a, b) => a.priority - b.priority);
-
-    suggestions.push({
-      weekday: schedule.weekday,
-      timeSlot: schedule.timeSlot,
-      replacements: ranked.slice(0, 5),
-    });
+    return suggestions;
   }
-
-  return suggestions;
-}
 }
