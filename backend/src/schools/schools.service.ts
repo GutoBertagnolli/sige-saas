@@ -1,9 +1,50 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../common/prisma.service';
 
 @Injectable()
 export class SchoolsService {
   constructor(private prisma: PrismaService) {}
+
+  private async resolveTenantId(tenantId?: string) {
+    if (tenantId) {
+      const tenant = await this.prisma.tenant.findFirst({
+        where: {
+          id: tenantId,
+          active: true,
+        },
+      });
+
+      if (tenant) {
+        return tenant.id;
+      }
+    }
+
+    const defaultTenant = await this.prisma.tenant.findFirst({
+      where: {
+        slug: 'suportiva',
+        active: true,
+      },
+    });
+
+    if (defaultTenant) {
+      return defaultTenant.id;
+    }
+
+    const firstActiveTenant = await this.prisma.tenant.findFirst({
+      where: {
+        active: true,
+      },
+      orderBy: {
+        createdAt: 'asc',
+      },
+    });
+
+    if (!firstActiveTenant) {
+      throw new BadRequestException('Nenhum tenant ativo encontrado para cadastrar a escola.');
+    }
+
+    return firstActiveTenant.id;
+  }
 
   findAll() {
     return this.prisma.school.findMany({
@@ -28,16 +69,25 @@ export class SchoolsService {
     });
   }
 
-  create(data: {
-    tenantId: string;
+  async create(data: {
+    tenantId?: string;
     name: string;
     type?: string;
     address?: string;
     phone?: string;
     email?: string;
   }) {
+    const tenantId = await this.resolveTenantId(data.tenantId);
+
     return this.prisma.school.create({
-      data,
+      data: {
+        tenantId,
+        name: data.name,
+        type: data.type,
+        address: data.address || null,
+        phone: data.phone || null,
+        email: data.email || null,
+      },
     });
   }
 

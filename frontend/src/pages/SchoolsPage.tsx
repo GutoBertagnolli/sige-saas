@@ -12,8 +12,6 @@ type School = {
   active: boolean;
 };
 
-const TENANT_ID = 'd48a9959-685e-4dc7-8af4-a156e9cfa9ac';
-
 async function getSchools() {
   const response = await api.get<School[]>('/schools');
   return response.data;
@@ -33,7 +31,6 @@ async function saveSchool(data: {
   }
 
   const response = await api.post('/schools', {
-    tenantId: TENANT_ID,
     name: data.name,
     type: data.type,
     address: data.address,
@@ -77,8 +74,8 @@ export default function SchoolsPage() {
       await queryClient.invalidateQueries({ queryKey: ['schools'] });
       closeModal();
     },
-    onError: () => {
-      alert('Erro ao salvar escola.');
+    onError: (error: any) => {
+      alert(error?.response?.data?.message ?? 'Erro ao salvar escola.');
     },
   });
 
@@ -87,8 +84,8 @@ export default function SchoolsPage() {
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['schools'] });
     },
-    onError: () => {
-      alert('Erro ao excluir escola.');
+    onError: (error: any) => {
+      alert(error?.response?.data?.message ?? 'Erro ao excluir escola.');
     },
   });
 

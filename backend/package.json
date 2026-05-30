@@ -1,6 +1,6 @@
 {
   "name": "sige-backend",
-  "version": "0.1.0",
+  "version": "0.2.2",
   "description": "SIGE by SUPORTIVA - Backend NestJS",
   "scripts": {
     "start": "nest start",

@@ -3,6 +3,7 @@ import {
   QueryClientProvider,
 } from '@tanstack/react-query';
 import AbsencesPage from './pages/AbsencesPage';
+import SubstitutionsPage from './pages/SubstitutionsPage';
 import EmployeesPage from './pages/EmployeesPage';
 import EmployeePlannerPage from './pages/EmployeePlannerPage';
 import TimeTemplatesPage from './pages/TimeTemplatesPage';
@@ -27,6 +28,7 @@ import {
   useLocation,
 } from 'react-router-dom';
 import './index.css';
+import { APP_VERSION } from './version';
 
 const menu = [
   { label: 'Dashboard', path: '/dashboard' },
@@ -92,7 +94,8 @@ function Layout() {
             </p>
           </div>
           <div className="text-right text-xs text-slate-500">
-            sige.suportiva.org
+            <div>sige.suportiva.org</div>
+            <div>Versão {APP_VERSION}</div>
           </div>
         </header>
 
@@ -105,7 +108,7 @@ function Layout() {
           <Route path="/horarios" element={<TimeTemplatesPage />} />
           <Route path="/servidores" element={<EmployeesPage />} />
 	  <Route path="/afastamentos" element={<AbsencesPage />} />          
-          <Route path="/substituicoes" element={<SimplePage title="Substituições" />} />
+          <Route path="/substituicoes" element={<SubstitutionsPage />} />
           <Route path="/relatorios" element={<SimplePage title="Relatórios" />} />
           <Route path="/configuracoes" element={<SimplePage title="Configurações" />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
