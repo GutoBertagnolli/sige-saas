@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../services/api';
 
@@ -9,7 +9,29 @@ type Employee = {
   school?: {
     id: string;
     name: string;
-  };
+  } | null;
+};
+
+type Substitution = {
+  id: string;
+  absenceId: string;
+  weekday?: string | null;
+  classScheduleId?: string | null;
+  timeSlotId?: string | null;
+  status: string;
+  score?: number;
+  originalTeacher?: Employee | null;
+  substituteTeacher?: Employee | null;
+  timeSlot?: {
+    id?: string;
+    startTime: string;
+    endTime: string;
+  } | null;
+  classSchedule?: {
+    class?: {
+      name: string;
+    } | null;
+  } | null;
 };
 
 type Absence = {
@@ -21,12 +43,15 @@ type Absence = {
   type?: string;
   employeeId?: string;
   employee?: Employee;
+  substitutions?: Substitution[];
 };
 
 type ReplacementSuggestion = {
   absenceId: string;
   originalTeacherId: string;
   weekday: string;
+  classScheduleId?: string | null;
+  className?: string | null;
   timeSlot?: {
     id: string;
     startTime: string;
@@ -56,14 +81,52 @@ async function createAbsence(data: any) {
   return response.data;
 }
 
+async function deleteAbsence(id: string) {
+  const response = await api.delete(`/absences/${id}`);
+  return response.data;
+}
+
 async function createSubstitution(data: any) {
-  const response = await api.post('/substitutions', data);
+  const response = await api.post<Substitution>('/substitutions', data);
+  return response.data;
+}
+
+async function deleteSubstitution(id: string) {
+  const response = await api.delete(`/substitutions/${id}`);
   return response.data;
 }
 
 async function getReplacementSuggestions(absenceId: string) {
-  const response = await api.get(`/absences/${absenceId}/replacements`);
+  const response = await api.get<ReplacementSuggestion[]>(`/absences/${absenceId}/replacements`);
   return response.data;
+}
+
+function getSuggestionKey(slot: ReplacementSuggestion) {
+  return [
+    slot.absenceId,
+    slot.weekday,
+    slot.timeSlot?.id ?? '',
+    slot.classScheduleId ?? '',
+  ].join('|');
+}
+
+function getSubstitutionKey(substitution: Substitution) {
+  return [
+    substitution.absenceId,
+    substitution.weekday ?? '',
+    substitution.timeSlotId ?? substitution.timeSlot?.id ?? '',
+    substitution.classScheduleId ?? '',
+  ].join('|');
+}
+
+function formatSubstitutionSchedule(substitution: Substitution) {
+  const weekday = substitution.weekday ?? 'Dia não informado';
+  const time = substitution.timeSlot
+    ? `${substitution.timeSlot.startTime} - ${substitution.timeSlot.endTime}`
+    : 'Horário não informado';
+  const className = substitution.classSchedule?.class?.name;
+
+  return [weekday, time, className].filter(Boolean).join(' • ');
 }
 
 export default function AbsencesPage() {
@@ -75,6 +138,7 @@ export default function AbsencesPage() {
   const [reason, setReason] = useState('ATESTADO');
   const [description, setDescription] = useState('');
   const [replacementSuggestions, setReplacementSuggestions] = useState<ReplacementSuggestion[]>([]);
+  const [selectedSubstitutions, setSelectedSubstitutions] = useState<Substitution[]>([]);
 
   const { data: employees = [] } = useQuery({
     queryKey: ['employees'],
@@ -86,31 +150,85 @@ export default function AbsencesPage() {
     queryFn: getAbsences,
   });
 
+  const selectedSlotKeys = useMemo(() => {
+    const keys = new Set<string>();
+
+    for (const absence of absences) {
+      for (const substitution of absence.substitutions ?? []) {
+        keys.add(getSubstitutionKey(substitution));
+      }
+    }
+
+    for (const substitution of selectedSubstitutions) {
+      keys.add(getSubstitutionKey(substitution));
+    }
+
+    return keys;
+  }, [absences, selectedSubstitutions]);
+
   const substitutionMutation = useMutation({
     mutationFn: createSubstitution,
-    onSuccess: async () => {
-      alert('Substituição registrada com sucesso.');
+    onSuccess: async (substitution) => {
+      setSelectedSubstitutions((current) => [
+        substitution,
+        ...current.filter((item) => item.id !== substitution.id),
+      ]);
+
+      const selectedName = substitution.substituteTeacher?.name ?? 'Substituto selecionado';
+      alert(`${selectedName} foi selecionado para substituir neste horário.`);
       await queryClient.invalidateQueries({ queryKey: ['absences'] });
+      await queryClient.invalidateQueries({ queryKey: ['substitutions'] });
     },
-    onError: () => {
-      alert('Erro ao registrar substituição.');
+    onError: (error: any) => {
+      alert(error?.response?.data?.message ?? 'Erro ao registrar substituição.');
     },
   });
+
+  const deleteSubstitutionMutation = useMutation({
+    mutationFn: deleteSubstitution,
+    onSuccess: async (_deleted, id) => {
+      setSelectedSubstitutions((current) => current.filter((item) => item.id !== id));
+      alert('Substituição apagada com sucesso.');
+      await queryClient.invalidateQueries({ queryKey: ['absences'] });
+      await queryClient.invalidateQueries({ queryKey: ['substitutions'] });
+    },
+    onError: () => {
+      alert('Erro ao apagar substituição.');
+    },
+  });
+
+  const deleteAbsenceMutation = useMutation({
+    mutationFn: deleteAbsence,
+    onSuccess: async (_deleted, id) => {
+      setReplacementSuggestions((current) => current.filter((slot) => slot.absenceId !== id));
+      setSelectedSubstitutions((current) => current.filter((item) => item.absenceId !== id));
+      alert('Afastamento apagado com sucesso.');
+      await queryClient.invalidateQueries({ queryKey: ['absences'] });
+      await queryClient.invalidateQueries({ queryKey: ['substitutions'] });
+    },
+    onError: () => {
+      alert('Erro ao apagar afastamento.');
+    },
+  });
+
+  async function loadReplacementSuggestions(absence: Absence) {
+    const suggestions = await getReplacementSuggestions(absence.id);
+
+    const normalizedSuggestions = suggestions.map((slot) => ({
+      ...slot,
+      absenceId: absence.id,
+      originalTeacherId: slot.originalTeacherId || absence.employeeId || absence.employee?.id || employeeId,
+    }));
+
+    setReplacementSuggestions(normalizedSuggestions);
+  }
 
   const createMutation = useMutation({
     mutationFn: createAbsence,
     onSuccess: async (savedAbsence: Absence) => {
       alert('Afastamento salvo com sucesso.');
 
-      const suggestions = await getReplacementSuggestions(savedAbsence.id);
-
-      const normalizedSuggestions = suggestions.map((slot: any) => ({
-        ...slot,
-        absenceId: savedAbsence.id,
-        originalTeacherId: savedAbsence.employeeId || employeeId,
-      }));
-
-      setReplacementSuggestions(normalizedSuggestions);
+      await loadReplacementSuggestions(savedAbsence);
 
       await queryClient.invalidateQueries({ queryKey: ['absences'] });
 
@@ -154,8 +272,14 @@ export default function AbsencesPage() {
       return;
     }
 
+    if (selectedSlotKeys.has(getSuggestionKey(slot))) {
+      alert('Este horário já tem um professor substituto selecionado. Apague a substituição atual antes de selecionar outro.');
+      return;
+    }
+
     substitutionMutation.mutate({
       absenceId: slot.absenceId,
+      classScheduleId: slot.classScheduleId ?? null,
       timeSlotId: slot.timeSlot.id,
       weekday: slot.weekday,
       originalTeacherId: slot.originalTeacherId,
@@ -163,6 +287,22 @@ export default function AbsencesPage() {
       score: replacement.priority,
       status: 'PENDING_DIRECTOR',
     });
+  }
+
+  function handleDeleteAbsence(absence: Absence) {
+    if (!confirm(`Apagar o afastamento de ${absence.employee?.name ?? 'servidor'}? As substituições vinculadas também serão apagadas.`)) {
+      return;
+    }
+
+    deleteAbsenceMutation.mutate(absence.id);
+  }
+
+  function handleDeleteSubstitution(substitution: Substitution) {
+    if (!confirm(`Apagar a substituição de ${substitution.substituteTeacher?.name ?? 'substituto'}?`)) {
+      return;
+    }
+
+    deleteSubstitutionMutation.mutate(substitution.id);
   }
 
   return (
@@ -255,60 +395,111 @@ export default function AbsencesPage() {
             <h2 className="font-semibold mb-3">Sugestões automáticas de substituição</h2>
 
             <div className="grid gap-4">
-              {replacementSuggestions.map((slot, index) => (
-                <div
-                  key={`${slot.weekday}-${slot.timeSlot?.id || index}`}
-                  className="bg-white border rounded-xl p-4"
-                >
-                  <div className="font-medium mb-2">
-                    {slot.weekday} • {slot.timeSlot?.startTime} - {slot.timeSlot?.endTime}
+              {replacementSuggestions.map((slot, index) => {
+                const alreadySelected = selectedSlotKeys.has(getSuggestionKey(slot));
+
+                return (
+                  <div
+                    key={`${slot.weekday}-${slot.timeSlot?.id || index}`}
+                    className="bg-white border rounded-xl p-4"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                      <div className="font-medium">
+                        {slot.weekday} • {slot.timeSlot?.startTime} - {slot.timeSlot?.endTime}
+                        {slot.className ? ` • ${slot.className}` : ''}
+                      </div>
+
+                      {alreadySelected && (
+                        <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700">
+                          Professor já selecionado
+                        </span>
+                      )}
+                    </div>
+
+                    {slot.replacements?.length > 0 ? (
+                      <div className="grid gap-2">
+                        {slot.replacements.map((replacement) => (
+                          <div
+                            key={replacement.employeeId}
+                            className={`flex justify-between items-center gap-3 border rounded-lg px-3 py-2 text-sm ${
+                              replacement.priority <= 2
+                                ? 'bg-green-50'
+                                : replacement.priority === 3
+                                  ? 'bg-yellow-50'
+                                  : replacement.priority <= 5
+                                    ? 'bg-orange-50'
+                                    : 'bg-slate-50'
+                            }`}
+                          >
+                            <div>
+                              <div className="font-medium">{replacement.name}</div>
+                              <div className="text-xs text-slate-500">
+                                {replacement.roleType?.replace(/_/g, ' ') || 'FUNÇÃO NÃO INFORMADA'} • {replacement.reason}
+                              </div>
+                            </div>
+
+                            <div className="flex flex-col items-end gap-2">
+                              <div className="text-xs font-semibold">
+                                Prioridade {replacement.priority}
+                              </div>
+
+                              <button
+                                onClick={() => handleSelectSubstitute(slot, replacement)}
+                                disabled={substitutionMutation.isPending || alreadySelected}
+                                className="px-3 py-1 rounded-lg bg-slate-900 text-white text-xs disabled:opacity-60"
+                              >
+                                {alreadySelected ? 'Selecionado' : 'Selecionar'}
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-sm text-slate-500">
+                        Nenhum substituto sugerido para este horário.
+                      </div>
+                    )}
                   </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
-                  {slot.replacements?.length > 0 ? (
-                    <div className="grid gap-2">
-                      {slot.replacements.map((replacement) => (
-                        <div
-                          key={replacement.employeeId}
-                          className={`flex justify-between items-center gap-3 border rounded-lg px-3 py-2 text-sm ${
-                            replacement.priority <= 2
-                              ? 'bg-green-50'
-                              : replacement.priority === 3
-                                ? 'bg-yellow-50'
-                                : replacement.priority <= 5
-                                  ? 'bg-orange-50'
-                                  : 'bg-slate-50'
-                          }`}
+        {selectedSubstitutions.length > 0 && (
+          <div className="mb-6 border rounded-2xl p-5">
+            <h2 className="font-semibold mb-3">Substituições selecionadas nesta tela</h2>
+            <div className="overflow-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b">
+                    <th className="text-left py-3">Substituto</th>
+                    <th className="text-left py-3">Servidor original</th>
+                    <th className="text-left py-3">Horário</th>
+                    <th className="text-left py-3">Status</th>
+                    <th className="text-left py-3">Ações</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {selectedSubstitutions.map((substitution) => (
+                    <tr key={substitution.id} className="border-b">
+                      <td className="py-3">{substitution.substituteTeacher?.name ?? '-'}</td>
+                      <td className="py-3">{substitution.originalTeacher?.name ?? '-'}</td>
+                      <td className="py-3">{formatSubstitutionSchedule(substitution)}</td>
+                      <td className="py-3">{substitution.status}</td>
+                      <td className="py-3">
+                        <button
+                          onClick={() => handleDeleteSubstitution(substitution)}
+                          disabled={deleteSubstitutionMutation.isPending}
+                          className="px-3 py-1 rounded-lg border border-red-200 text-xs text-red-700 hover:bg-red-50 disabled:opacity-60"
                         >
-                          <div>
-                            <div className="font-medium">{replacement.name}</div>
-                            <div className="text-xs text-slate-500">
-                              {replacement.roleType?.replace(/_/g, ' ') || 'FUNÇÃO NÃO INFORMADA'} • {replacement.reason}
-                            </div>
-                          </div>
-
-                          <div className="flex flex-col items-end gap-2">
-                            <div className="text-xs font-semibold">
-                              Prioridade {replacement.priority}
-                            </div>
-
-                            <button
-                              onClick={() => handleSelectSubstitute(slot, replacement)}
-                              disabled={substitutionMutation.isPending}
-                              className="px-3 py-1 rounded-lg bg-slate-900 text-white text-xs disabled:opacity-60"
-                            >
-                              Selecionar
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-sm text-slate-500">
-                      Nenhum substituto sugerido para este horário.
-                    </div>
-                  )}
-                </div>
-              ))}
+                          Apagar
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
         )}
@@ -324,6 +515,8 @@ export default function AbsencesPage() {
                 <th className="text-left py-3">Fim</th>
                 <th className="text-left py-3">Motivo</th>
                 <th className="text-left py-3">Status</th>
+                <th className="text-left py-3">Substituições</th>
+                <th className="text-left py-3">Ações</th>
               </tr>
             </thead>
 
@@ -343,12 +536,30 @@ export default function AbsencesPage() {
                   </td>
                   <td className="py-3">{absence.reason}</td>
                   <td className="py-3">{absence.status}</td>
+                  <td className="py-3">{absence.substitutions?.length ?? 0}</td>
+                  <td className="py-3">
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        onClick={() => loadReplacementSuggestions(absence)}
+                        className="px-3 py-1 rounded-lg border text-xs hover:bg-slate-50"
+                      >
+                        Gerar sugestões
+                      </button>
+                      <button
+                        onClick={() => handleDeleteAbsence(absence)}
+                        disabled={deleteAbsenceMutation.isPending}
+                        className="px-3 py-1 rounded-lg border border-red-200 text-xs text-red-700 hover:bg-red-50 disabled:opacity-60"
+                      >
+                        Apagar
+                      </button>
+                    </div>
+                  </td>
                 </tr>
               ))}
 
               {absences.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="py-6 text-center text-slate-500">
+                  <td colSpan={9} className="py-6 text-center text-slate-500">
                     Nenhum afastamento cadastrado.
                   </td>
                 </tr>
