@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { SubstitutionStatus } from '@prisma/client';
 import { PrismaService } from '../common/prisma.service';
 import { SettingsService } from '../settings/settings.service';
@@ -105,7 +105,28 @@ export class AbsencesService {
     });
   }
 
-  create(data: any) {
+  async create(data: any) {
+    const existingAbsence = await this.prisma.absence.findFirst({
+      where: {
+        employeeId: data.employeeId,
+        status: {
+          not: 'CANCELLED',
+        },
+        startDate: {
+          lte: new Date(data.endDate),
+        },
+        endDate: {
+          gte: new Date(data.startDate),
+        },
+      },
+    });
+
+    if (existingAbsence) {
+      throw new BadRequestException(
+        'Este servidor já possui afastamento cadastrado neste período.',
+      );
+    }
+
     return this.prisma.absence.create({
       data,
       include: {
@@ -182,6 +203,12 @@ export class AbsencesService {
       return [];
     }
 
+    const absentEmployeeIds = await this.getAbsentEmployeeIds(
+      absence.startDate,
+      absence.endDate,
+    );
+    absentEmployeeIds.add(employee.id);
+
     const suggestions = [];
 
     for (const schedule of employee.weeklySchedules) {
@@ -204,7 +231,7 @@ export class AbsencesService {
         where: {
           schoolId: employee.schoolId,
           id: {
-            not: employee.id,
+            notIn: Array.from(absentEmployeeIds),
           },
           active: true,
         },
@@ -219,7 +246,14 @@ export class AbsencesService {
         },
       });
 
+      const busySubstituteIds = await this.getBusySubstituteIds(
+        absence.id,
+        schedule.weekday,
+        schedule.timeSlotId,
+      );
+
       const ranked = availableEmployees
+        .filter((candidate) => !busySubstituteIds.has(candidate.id))
         .map((candidate) => {
           const slot = candidate.weeklySchedules[0];
 
@@ -269,5 +303,57 @@ export class AbsencesService {
     }
 
     return suggestions;
+  }
+
+  private async getAbsentEmployeeIds(startDate: Date, endDate: Date) {
+    const overlappingAbsences = await this.prisma.absence.findMany({
+      where: {
+        status: {
+          not: 'CANCELLED',
+        },
+        startDate: {
+          lte: endDate,
+        },
+        endDate: {
+          gte: startDate,
+        },
+      },
+      select: {
+        employeeId: true,
+      },
+    });
+
+    return new Set(overlappingAbsences.map((absence) => absence.employeeId));
+  }
+
+  private async getBusySubstituteIds(
+    absenceId: string,
+    weekday: any,
+    timeSlotId: string,
+  ) {
+    const substitutions = await this.prisma.substitution.findMany({
+      where: {
+        absenceId: {
+          not: absenceId,
+        },
+        weekday,
+        timeSlotId,
+        status: {
+          not: 'CANCELLED',
+        },
+        substituteTeacherId: {
+          not: null,
+        },
+      },
+      select: {
+        substituteTeacherId: true,
+      },
+    });
+
+    return new Set(
+      substitutions
+        .map((substitution) => substitution.substituteTeacherId)
+        .filter(Boolean) as string[],
+    );
   }
 }

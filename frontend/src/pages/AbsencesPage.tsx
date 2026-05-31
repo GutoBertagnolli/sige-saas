@@ -429,8 +429,8 @@ export default function AbsencesPage() {
       setReason('ATESTADO');
       setDescription('');
     },
-    onError: () => {
-      alert('Erro ao salvar afastamento.');
+    onError: (error: any) => {
+      alert(error?.response?.data?.message ?? 'Erro ao salvar afastamento.');
     },
   });
 

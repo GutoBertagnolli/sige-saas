@@ -182,6 +182,27 @@ export class SubstitutionsService {
       throw new BadRequestException('Substituto inválido ou inativo.');
     }
 
+    const substituteAbsence = await this.prisma.absence.findFirst({
+      where: {
+        employeeId: data.substituteTeacherId,
+        status: {
+          not: 'CANCELLED',
+        },
+        startDate: {
+          lte: absence.endDate,
+        },
+        endDate: {
+          gte: absence.startDate,
+        },
+      },
+    });
+
+    if (substituteAbsence) {
+      throw new BadRequestException(
+        'Este servidor também está afastado no período e não pode ser substituto.',
+      );
+    }
+
     const existing = await this.prisma.substitution.findFirst({
       where: {
         absenceId: data.absenceId,
@@ -197,6 +218,26 @@ export class SubstitutionsService {
     if (existing) {
       throw new ConflictException(
         'Já existe substituto selecionado para este afastamento, dia e horário. Apague a substituição atual antes de selecionar outro professor.',
+      );
+    }
+
+    const simultaneousSubstitution = await this.prisma.substitution.findFirst({
+      where: {
+        absenceId: {
+          not: data.absenceId,
+        },
+        substituteTeacherId: data.substituteTeacherId,
+        timeSlotId: data.timeSlotId,
+        weekday: data.weekday,
+        status: {
+          not: SubstitutionStatus.CANCELLED,
+        },
+      },
+    });
+
+    if (simultaneousSubstitution) {
+      throw new ConflictException(
+        'Este servidor já foi selecionado para outra substituição neste mesmo dia e horário.',
       );
     }
 
