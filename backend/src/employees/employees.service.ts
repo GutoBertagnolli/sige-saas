@@ -215,12 +215,28 @@ export class EmployeesService {
     });
   }
 
-  update(id: string, data: any) {
+  async update(id: string, data: any) {
     if (data.roleType) {
       data.roleType = this.normalizeRoleType(data.roleType);
     }
 
-    return this.prisma.employee.update({
+    const employee = await this.prisma.employee.findUnique({
+      where: { id },
+      include: {
+        school: true,
+        user: {
+          include: {
+            role: true,
+          },
+        },
+      },
+    });
+
+    if (!employee) {
+      throw new Error('Servidor não encontrado.');
+    }
+
+    const updatedEmployee = await this.prisma.employee.update({
       where: { id },
       data,
       include: {
@@ -232,6 +248,33 @@ export class EmployeesService {
         },
       },
     });
+
+    if (employee.userId && data.roleType) {
+      const role = await this.findOrCreateRole(employee.tenantId, data.roleType);
+
+      await this.prisma.user.update({
+        where: {
+          id: employee.userId,
+        },
+        data: {
+          roleId: role.id,
+        },
+      });
+
+      return this.prisma.employee.findUnique({
+        where: { id },
+        include: {
+          school: true,
+          user: {
+            include: {
+              role: true,
+            },
+          },
+        },
+      });
+    }
+
+    return updatedEmployee;
   }
 
   async generateAccess(id: string) {

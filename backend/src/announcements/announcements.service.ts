@@ -46,7 +46,21 @@ export class AnnouncementsService {
     return firstActiveTenant.id;
   }
 
-  findAll() {
+  private async ensureAnnouncementColumns() {
+    await this.prisma.$executeRaw`
+      ALTER TABLE "Announcement"
+      ADD COLUMN IF NOT EXISTS "priority" INTEGER NOT NULL DEFAULT 2
+    `;
+
+    await this.prisma.$executeRaw`
+      ALTER TABLE "Announcement"
+      ADD COLUMN IF NOT EXISTS "targetRoleType" "EmployeeRoleType"
+    `;
+  }
+
+  async findAll() {
+    await this.ensureAnnouncementColumns();
+
     return this.prisma.announcement.findMany({
       include: {
         school: true,
@@ -58,7 +72,9 @@ export class AnnouncementsService {
     });
   }
 
-  findActive(filters?: { roleType?: string; schoolId?: string }) {
+  async findActive(filters?: { roleType?: string; schoolId?: string }) {
+    await this.ensureAnnouncementColumns();
+
     const now = new Date();
     const roleType = filters?.roleType
       ? filters.roleType === 'COORDENADOR'
@@ -132,6 +148,8 @@ export class AnnouncementsService {
   }
 
   async create(data: any) {
+    await this.ensureAnnouncementColumns();
+
     if (!data.title?.trim()) {
       throw new BadRequestException('Título é obrigatório.');
     }
