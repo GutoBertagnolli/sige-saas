@@ -18,9 +18,32 @@ type CreateSubstitutionInput = {
   status?: SubstitutionStatus;
 };
 
+const ACCEPTANCE_TIMEOUT_MINUTES = 30;
+
 @Injectable()
 export class SubstitutionsService {
   constructor(private prisma: PrismaService) {}
+
+  private async autoAcceptExpired() {
+    const expiresBefore = new Date(
+      Date.now() - ACCEPTANCE_TIMEOUT_MINUTES * 60 * 1000,
+    );
+
+    await this.prisma.substitution.updateMany({
+      where: {
+        status: SubstitutionStatus.PENDING_DIRECTOR,
+        acceptedAt: null,
+        createdAt: {
+          lte: expiresBefore,
+        },
+      },
+      data: {
+        status: SubstitutionStatus.ACCEPTED,
+        acceptedAt: new Date(),
+        approvedBy: 'AUTO',
+      },
+    });
+  }
 
   private async attachTeachers(substitution: any) {
     const employeeIds = [
@@ -53,6 +76,8 @@ export class SubstitutionsService {
   }
 
   async findAll() {
+    await this.autoAcceptExpired();
+
     const substitutions = await this.prisma.substitution.findMany({
       include: {
         absence: {
@@ -208,6 +233,37 @@ export class SubstitutionsService {
     });
 
     return this.attachTeachers(substitution);
+  }
+
+  async accept(id: string) {
+    const substitution = await this.prisma.substitution.findUnique({
+      where: { id },
+    });
+
+    if (!substitution) {
+      throw new NotFoundException('Substituição não encontrada.');
+    }
+
+    const accepted = await this.prisma.substitution.update({
+      where: { id },
+      data: {
+        status: SubstitutionStatus.ACCEPTED,
+        acceptedAt: new Date(),
+        approvedBy: 'DIRECAO',
+      },
+      include: {
+        absence: true,
+        classSchedule: {
+          include: {
+            class: true,
+          },
+        },
+        timeSlot: true,
+        scoreDetails: true,
+      },
+    });
+
+    return this.attachTeachers(accepted);
   }
 
   async remove(id: string) {

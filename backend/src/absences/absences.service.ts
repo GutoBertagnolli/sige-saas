@@ -1,11 +1,37 @@
 import { Injectable } from '@nestjs/common';
+import { SubstitutionStatus } from '@prisma/client';
 import { PrismaService } from '../common/prisma.service';
+
+const ACCEPTANCE_TIMEOUT_MINUTES = 30;
 
 @Injectable()
 export class AbsencesService {
   constructor(private prisma: PrismaService) {}
 
-  findAll() {
+  private async autoAcceptExpiredSubstitutions() {
+    const expiresBefore = new Date(
+      Date.now() - ACCEPTANCE_TIMEOUT_MINUTES * 60 * 1000,
+    );
+
+    await this.prisma.substitution.updateMany({
+      where: {
+        status: SubstitutionStatus.PENDING_DIRECTOR,
+        acceptedAt: null,
+        createdAt: {
+          lte: expiresBefore,
+        },
+      },
+      data: {
+        status: SubstitutionStatus.ACCEPTED,
+        acceptedAt: new Date(),
+        approvedBy: 'AUTO',
+      },
+    });
+  }
+
+  async findAll() {
+    await this.autoAcceptExpiredSubstitutions();
+
     return this.prisma.absence.findMany({
       include: {
         employee: {

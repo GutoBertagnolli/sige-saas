@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../services/api';
 
@@ -20,6 +20,9 @@ type Substitution = {
   timeSlotId?: string | null;
   status: string;
   score?: number;
+  createdAt?: string;
+  acceptedAt?: string | null;
+  approvedBy?: string | null;
   originalTeacher?: Employee | null;
   substituteTeacher?: Employee | null;
   timeSlot?: {
@@ -96,6 +99,11 @@ async function deleteSubstitution(id: string) {
   return response.data;
 }
 
+async function acceptSubstitution(id: string) {
+  const response = await api.put<Substitution>(`/substitutions/${id}/accept`);
+  return response.data;
+}
+
 async function getReplacementSuggestions(absenceId: string) {
   const response = await api.get<ReplacementSuggestion[]>(`/absences/${absenceId}/replacements`);
   return response.data;
@@ -132,7 +140,7 @@ const WEEKDAY_LABELS: Record<string, string> = {
 const STATUS_LABELS: Record<string, string> = {
   OPEN: 'Aberto',
   SUBSTITUTIONS_GENERATED: 'Substituições geradas',
-  PENDING_DIRECTOR: 'Pendente direção',
+  PENDING_DIRECTOR: 'Aguardando aceite',
   SENT_TO_TEACHER: 'Enviado ao professor',
   ACCEPTED: 'Aceito',
   DECLINED: 'Recusado',
@@ -157,6 +165,8 @@ const SUBSTITUTE_ROW_COLORS = [
   'bg-rose-50 border-l-4 border-l-rose-500',
   'bg-cyan-50 border-l-4 border-l-cyan-500',
 ];
+
+const ACCEPTANCE_TIMEOUT_MINUTES = 30;
 
 function translateWeekday(value?: string | null) {
   return value ? WEEKDAY_LABELS[value] ?? value : 'Dia não informado';
@@ -200,6 +210,47 @@ function getSubstituteColorMap(substitutions: Substitution[]) {
   return colorBySubstitute;
 }
 
+function getAcceptanceDeadline(substitution: Substitution) {
+  if (!substitution.createdAt) {
+    return null;
+  }
+
+  return new Date(
+    new Date(substitution.createdAt).getTime() +
+      ACCEPTANCE_TIMEOUT_MINUTES * 60 * 1000,
+  );
+}
+
+function formatAcceptanceTimer(substitution: Substitution, now: number) {
+  if (substitution.status === 'ACCEPTED') {
+    return substitution.approvedBy === 'AUTO'
+      ? 'Aceita automaticamente'
+      : 'Aceita pela direção';
+  }
+
+  const deadline = getAcceptanceDeadline(substitution);
+
+  if (!deadline) {
+    return 'Aguardando aceite';
+  }
+
+  const remainingMs = deadline.getTime() - now;
+
+  if (remainingMs <= 0) {
+    return 'Aceite automático pendente';
+  }
+
+  const totalSeconds = Math.ceil(remainingMs / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+}
+
+function canAcceptSubstitution(substitution: Substitution) {
+  return substitution.status !== 'ACCEPTED' && substitution.status !== 'CANCELLED';
+}
+
 export default function AbsencesPage() {
   const queryClient = useQueryClient();
 
@@ -210,6 +261,15 @@ export default function AbsencesPage() {
   const [description, setDescription] = useState('');
   const [replacementSuggestions, setReplacementSuggestions] = useState<ReplacementSuggestion[]>([]);
   const [selectedSubstitutions, setSelectedSubstitutions] = useState<Substitution[]>([]);
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      setNow(Date.now());
+    }, 1000);
+
+    return () => window.clearInterval(intervalId);
+  }, []);
 
   const { data: employees = [] } = useQuery({
     queryKey: ['employees'],
@@ -291,6 +351,21 @@ export default function AbsencesPage() {
     },
     onError: () => {
       alert('Erro ao apagar substituição.');
+    },
+  });
+
+  const acceptSubstitutionMutation = useMutation({
+    mutationFn: acceptSubstitution,
+    onSuccess: async (accepted) => {
+      setSelectedSubstitutions((current) => [
+        accepted,
+        ...current.filter((item) => item.id !== accepted.id),
+      ]);
+      await queryClient.invalidateQueries({ queryKey: ['absences'] });
+      await queryClient.invalidateQueries({ queryKey: ['substitutions'] });
+    },
+    onError: (error: any) => {
+      alert(error?.response?.data?.message ?? 'Erro ao aceitar substituição.');
     },
   });
 
@@ -503,6 +578,7 @@ export default function AbsencesPage() {
                     <th className="text-left py-3">Servidor original</th>
                     <th className="text-left py-3">Horário</th>
                     <th className="text-left py-3">Situação</th>
+                    <th className="text-left py-3">Tempo para aceite</th>
                     <th className="text-left py-3">Ações</th>
                   </tr>
                 </thead>
@@ -529,13 +605,29 @@ export default function AbsencesPage() {
                         </td>
                         <td className="py-3">{translateStatus(substitution.status)}</td>
                         <td className="py-3">
-                          <button
-                            onClick={() => handleDeleteSubstitution(substitution)}
-                            disabled={deleteSubstitutionMutation.isPending}
-                            className="px-3 py-1 rounded-lg border border-red-200 text-xs text-red-700 hover:bg-red-50 disabled:opacity-60"
-                          >
-                            Apagar
-                          </button>
+                          <span className="rounded-full bg-white/70 px-2 py-1 text-xs font-medium">
+                            {formatAcceptanceTimer(substitution, now)}
+                          </span>
+                        </td>
+                        <td className="py-3">
+                          <div className="flex flex-wrap gap-2">
+                            {canAcceptSubstitution(substitution) && (
+                              <button
+                                onClick={() => acceptSubstitutionMutation.mutate(substitution.id)}
+                                disabled={acceptSubstitutionMutation.isPending}
+                                className="px-3 py-1 rounded-lg border border-green-200 bg-white text-xs text-green-700 hover:bg-green-50 disabled:opacity-60"
+                              >
+                                Aceitar
+                              </button>
+                            )}
+                            <button
+                              onClick={() => handleDeleteSubstitution(substitution)}
+                              disabled={deleteSubstitutionMutation.isPending}
+                              className="px-3 py-1 rounded-lg border border-red-200 bg-white text-xs text-red-700 hover:bg-red-50 disabled:opacity-60"
+                            >
+                              Apagar
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );

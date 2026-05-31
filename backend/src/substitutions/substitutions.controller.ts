@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Put } from '@nestjs/common';
 import { SubstitutionsService } from './substitutions.service';
 
 @Controller('substitutions')
@@ -15,6 +15,11 @@ export class SubstitutionsController {
   @Post()
   create(@Body() body: any) {
     return this.service.create(body);
+  }
+
+  @Put(':id/accept')
+  accept(@Param('id') id: string) {
+    return this.service.accept(id);
   }
 
   @Delete(':id')
