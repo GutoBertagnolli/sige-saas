@@ -213,14 +213,7 @@ export default function EmployeePlannerPage() {
     );
   }
 
-  function fillShift(shift: string) {
-    const template = templates.find((item) => item.shift === shift);
-
-    if (!template) {
-      alert(`Nenhum modelo encontrado para ${shift}.`);
-      return;
-    }
-
+  function buildCellsForTemplate(template: TimeTemplate) {
     const newCells: LocalCell[] = [];
 
     template.slots.forEach((slot) => {
@@ -234,14 +227,31 @@ export default function EmployeePlannerPage() {
       });
     });
 
-    setSelectedTemplateId(template.id);
-    setLocalCells((prev) => {
-      const withoutSameSlots = prev.filter(
-        (item) => !template.slots.some((slot) => slot.id === item.timeSlotId),
-      );
+    return newCells;
+  }
 
-      return [...withoutSameSlots, ...newCells];
-    });
+  function mergeTemplateCells(prev: LocalCell[], template: TimeTemplate) {
+    const templateSlotIds = new Set(template.slots.map((slot) => slot.id));
+    const withoutTemplateSlots = prev.filter(
+      (item) => !templateSlotIds.has(item.timeSlotId),
+    );
+
+    return [...withoutTemplateSlots, ...buildCellsForTemplate(template)];
+  }
+
+  function fillShift(shift: string) {
+    const template =
+      selectedTemplate?.shift === shift
+        ? selectedTemplate
+        : templates.find((item) => item.shift === shift);
+
+    if (!template) {
+      alert(`Nenhum modelo encontrado para ${shift}.`);
+      return;
+    }
+
+    setSelectedTemplateId(template.id);
+    setLocalCells((prev) => mergeTemplateCells(prev, template));
   }
 
   function fillIntegral() {
@@ -254,21 +264,7 @@ export default function EmployeePlannerPage() {
     }
 
     setSelectedTemplateId(integralTemplate.id);
-
-    const newCells: LocalCell[] = [];
-
-    integralTemplate.slots.forEach((slot) => {
-      WEEKDAYS.forEach((day) => {
-        newCells.push({
-          weekday: day.key,
-          timeSlotId: slot.id,
-          type: defaultType,
-          requiresSubstitution: slot.requiresSubstitution,
-        });
-      });
-    });
-
-    setLocalCells(newCells);
+    setLocalCells(buildCellsForTemplate(integralTemplate));
   }
 
   function copyMondayToAllDays() {
@@ -315,7 +311,13 @@ export default function EmployeePlannerPage() {
       return;
     }
 
-    const items = localCells.map((cell) => ({
+    const uniqueCells = Array.from(
+      new Map(
+        localCells.map((cell) => [`${cell.weekday}:${cell.timeSlotId}`, cell]),
+      ).values(),
+    );
+
+    const items = uniqueCells.map((cell) => ({
       tenantId: TENANT_ID,
       employeeId,
       schoolId: employee.school!.id,
