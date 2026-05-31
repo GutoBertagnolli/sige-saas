@@ -97,7 +97,12 @@ export default function AnnouncementsPage() {
       await queryClient.invalidateQueries({ queryKey: ['announcements'] });
     },
     onError: (error: any) => {
-      alert(error?.response?.data?.message ?? 'Erro ao publicar aviso.');
+      const message =
+        error?.response?.data?.message ??
+        error?.response?.data?.error ??
+        'Erro ao publicar aviso.';
+
+      alert(Array.isArray(message) ? message.join('\n') : message);
     },
   });
 

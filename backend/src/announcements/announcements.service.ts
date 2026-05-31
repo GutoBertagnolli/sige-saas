@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { randomUUID } from 'crypto';
 import { PrismaService } from '../common/prisma.service';
 
 @Injectable()
@@ -151,32 +152,95 @@ export class AnnouncementsService {
     await this.ensureAnnouncementColumns();
 
     if (!data.title?.trim()) {
-      throw new BadRequestException('Título é obrigatório.');
+      throw new BadRequestException('Titulo e obrigatorio.');
     }
 
     if (!data.message?.trim()) {
-      throw new BadRequestException('Mensagem é obrigatória.');
+      throw new BadRequestException('Mensagem e obrigatoria.');
     }
 
     const tenantId = await this.resolveTenantId(data.tenantId);
+    const id = randomUUID();
+    const priority = Number(data.priority || 2);
+    const targetRoleType = data.targetRoleType
+      ? data.targetRoleType === 'COORDENADOR'
+        ? 'ORIENTADOR'
+        : String(data.targetRoleType)
+      : null;
+    const startDate = data.startDate ? new Date(data.startDate) : null;
+    const endDate = data.endDate ? new Date(data.endDate) : null;
 
-    return this.prisma.announcement.create({
-      data: {
-        tenantId,
-        schoolId: data.schoolId || null,
-        createdBy: data.createdBy || 'Direção',
-        title: data.title,
-        message: data.message,
-        imageUrl: data.imageUrl || null,
-        visibilityType: data.visibilityType || 'ALL',
-        priority: Number(data.priority || 2),
-        targetRoleType: data.targetRoleType
-          ? data.targetRoleType === 'COORDENADOR'
-            ? 'ORIENTADOR'
-            : data.targetRoleType
-          : null,
-        startDate: data.startDate ? new Date(data.startDate) : null,
-        endDate: data.endDate ? new Date(data.endDate) : null,
+    if (targetRoleType) {
+      await this.prisma.$executeRaw`
+        INSERT INTO "Announcement" (
+          id,
+          "tenantId",
+          "schoolId",
+          "createdBy",
+          title,
+          message,
+          "imageUrl",
+          "visibilityType",
+          priority,
+          "targetRoleType",
+          "startDate",
+          "endDate",
+          "createdAt"
+        )
+        VALUES (
+          ${id},
+          ${tenantId},
+          ${data.schoolId || null},
+          ${data.createdBy || 'Direcao'},
+          ${data.title},
+          ${data.message},
+          ${data.imageUrl || null},
+          ${data.visibilityType || 'ALL'},
+          ${Number.isFinite(priority) ? priority : 2},
+          ${targetRoleType}::"EmployeeRoleType",
+          ${startDate},
+          ${endDate},
+          now()
+        )
+      `;
+    } else {
+      await this.prisma.$executeRaw`
+        INSERT INTO "Announcement" (
+          id,
+          "tenantId",
+          "schoolId",
+          "createdBy",
+          title,
+          message,
+          "imageUrl",
+          "visibilityType",
+          priority,
+          "targetRoleType",
+          "startDate",
+          "endDate",
+          "createdAt"
+        )
+        VALUES (
+          ${id},
+          ${tenantId},
+          ${data.schoolId || null},
+          ${data.createdBy || 'Direcao'},
+          ${data.title},
+          ${data.message},
+          ${data.imageUrl || null},
+          ${data.visibilityType || 'ALL'},
+          ${Number.isFinite(priority) ? priority : 2},
+          NULL,
+          ${startDate},
+          ${endDate},
+          now()
+        )
+      `;
+    }
+
+    return this.prisma.announcement.findUnique({
+      where: {
+        id,
       },
       include: {
         school: true,
@@ -191,7 +255,7 @@ export class AnnouncementsService {
     });
 
     if (!announcement) {
-      throw new NotFoundException('Aviso não encontrado.');
+      throw new NotFoundException('Aviso nao encontrado.');
     }
 
     return this.prisma.announcement.delete({
