@@ -11,7 +11,17 @@ export class AuthService {
     const tenant = await this.prisma.tenant.findUnique({ where: { slug: tenantSlug } });
     if (!tenant || !tenant.active) throw new UnauthorizedException('Cliente inválido ou inativo');
 
-    const user = await this.prisma.user.findUnique({ where: { tenantId_email: { tenantId: tenant.id, email } }, include: { role: true } });
+    const user = await this.prisma.user.findUnique({
+      where: { tenantId_email: { tenantId: tenant.id, email } },
+      include: {
+        role: true,
+        employee: {
+          include: {
+            school: true,
+          },
+        },
+      },
+    });
     if (!user || !user.active) throw new UnauthorizedException('Usuário ou senha inválidos');
 
     const ok = await bcrypt.compare(password, user.passwordHash);
@@ -19,6 +29,16 @@ export class AuthService {
 
     await this.prisma.user.update({ where: { id: user.id }, data: { lastLogin: new Date() } });
     const token = this.jwt.sign({ sub: user.id, tenantId: tenant.id, roleId: user.roleId, email: user.email });
-    return { token, user: { id: user.id, name: user.name, email: user.email, role: user.role?.name }, tenant };
+    return {
+      token,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role?.name,
+        employee: user.employee,
+      },
+      tenant,
+    };
   }
 }

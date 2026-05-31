@@ -12,6 +12,11 @@ export class SubstitutionsController {
     return this.service.findAll();
   }
 
+  @Get('substitute/:employeeId')
+  findBySubstitute(@Param('employeeId') employeeId: string) {
+    return this.service.findBySubstitute(employeeId);
+  }
+
   @Post()
   create(@Body() body: any) {
     return this.service.create(body);
@@ -20,6 +25,11 @@ export class SubstitutionsController {
   @Put(':id/accept')
   accept(@Param('id') id: string) {
     return this.service.accept(id);
+  }
+
+  @Put(':id/decline')
+  decline(@Param('id') id: string) {
+    return this.service.decline(id);
   }
 
   @Delete(':id')

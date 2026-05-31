@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Query } from '@nestjs/common';
 import { AnnouncementsService } from './announcements.service';
 
 @Controller('announcements')
@@ -11,8 +11,11 @@ export class AnnouncementsController {
   }
 
   @Get('active')
-  findActive() {
-    return this.service.findActive();
+  findActive(
+    @Query('roleType') roleType?: string,
+    @Query('schoolId') schoolId?: string,
+  ) {
+    return this.service.findActive({ roleType, schoolId });
   }
 
   @Post()

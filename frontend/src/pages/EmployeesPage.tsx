@@ -15,8 +15,16 @@ type Employee = {
   cpf?: string | null;
   email?: string | null;
   phone?: string | null;
+  loginEmail?: string | null;
+  initialPassword?: string | null;
   active: boolean;
   school?: School | null;
+  user?: {
+    email: string;
+    role?: {
+      name: string;
+    } | null;
+  } | null;
 };
 
 const TENANT_ID = 'd48a9959-685e-4dc7-8af4-a156e9cfa9ac';
@@ -71,6 +79,7 @@ export default function EmployeesPage() {
   const [schoolId, setSchoolId] = useState('');
   const [roleType, setRoleType] = useState('PROFESSOR');
   const [search, setSearch] = useState('');
+  const [createdCredentials, setCreatedCredentials] = useState<Employee | null>(null);
 
   const { data: employees = [], isLoading } = useQuery({
     queryKey: ['employees'],
@@ -84,7 +93,10 @@ export default function EmployeesPage() {
 
   const saveMutation = useMutation({
     mutationFn: saveEmployee,
-    onSuccess: async () => {
+    onSuccess: async (savedEmployee) => {
+      if (!editingEmployee) {
+        setCreatedCredentials(savedEmployee);
+      }
       await queryClient.invalidateQueries({ queryKey: ['employees'] });
       closeModal();
     },
@@ -108,6 +120,7 @@ export default function EmployeesPage() {
   );
 
   function openCreateModal() {
+    setCreatedCredentials(null);
     setEditingEmployee(null);
     setName('');
     setCpf('');
@@ -195,6 +208,27 @@ export default function EmployeesPage() {
           />
         </div>
 
+        {createdCredentials && (
+          <div className="mb-4 rounded-2xl border border-green-200 bg-green-50 p-4 text-sm">
+            <div className="font-semibold text-green-900">
+              Acesso gerado para {createdCredentials.name}
+            </div>
+            <div className="mt-2 grid gap-2 md:grid-cols-2">
+              <div>
+                <span className="text-green-700">Login: </span>
+                <span className="font-mono">{createdCredentials.loginEmail}</span>
+              </div>
+              <div>
+                <span className="text-green-700">Senha inicial: </span>
+                <span className="font-mono">{createdCredentials.initialPassword}</span>
+              </div>
+            </div>
+            <div className="mt-2 text-xs text-green-700">
+              Guarde estes dados para envio por WhatsApp/e-mail quando a integração estiver habilitada.
+            </div>
+          </div>
+        )}
+
         {isLoading ? (
           <div className="text-sm text-slate-500">Carregando...</div>
         ) : (
@@ -208,6 +242,7 @@ export default function EmployeesPage() {
                   <th className="text-left py-3">Função</th>
 		  <th className="text-left py-3">Telefone</th>
                   <th className="text-left py-3">E-mail</th>
+                  <th className="text-left py-3">Login</th>
                   <th className="text-right py-3">Ações</th>
                 </tr>
               </thead>
@@ -219,10 +254,11 @@ export default function EmployeesPage() {
                     <td className="py-3">{employee.cpf || '-'}</td>
                     <td className="py-3">{employee.school?.name || '-'}</td>
                     <td className="py-3">
-		    {employee.roleType?.replace(/_/g, ' ') || 'PROFESSOR'}
+		    {employee.roleType === 'SERVICOS_GERAIS' ? 'Serviços Gerais' : employee.roleType?.replace(/_/g, ' ') || 'PROFESSOR'}
 </td>
  		    <td className="py-3">{employee.phone || '-'}</td>
                     <td className="py-3">{employee.email || '-'}</td>
+                    <td className="py-3">{employee.loginEmail || employee.user?.email || '-'}</td>
                     <td className="py-3">
                       <div className="flex justify-end gap-2">
                         <button
@@ -252,7 +288,7 @@ export default function EmployeesPage() {
 
                 {filteredEmployees.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="py-6 text-center text-slate-500">
+                    <td colSpan={8} className="py-6 text-center text-slate-500">
                       Nenhum servidor encontrado.
                     </td>
                   </tr>
@@ -343,7 +379,6 @@ export default function EmployeesPage() {
     <option value="AUXILIAR">Auxiliar</option>
     <option value="ORIENTADOR">Orientador</option>
     <option value="DIRETOR">Diretor</option>
-    <option value="COORDENADOR">Coordenador</option>
     <option value="SECRETARIA">Secretaria</option>
     <option value="SERVICOS_GERAIS">Serviços Gerais</option>
   </select>

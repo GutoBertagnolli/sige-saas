@@ -61,7 +61,6 @@ enum EmployeeRoleType {
   AUXILIAR
   ORIENTADOR
   DIRETOR
-  COORDENADOR
   SECRETARIA
   SERVICOS_GERAIS
 }
@@ -105,6 +104,7 @@ model User {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
+  employee Employee?
   auditLogs AuditLog[]
 
   @@unique([tenantId, email])
@@ -193,6 +193,10 @@ model Employee {
   email     String?
   phone     String?
   photoUrl  String?
+  userId    String?          @unique
+  user      User?            @relation(fields: [userId], references: [id])
+  loginEmail String?
+  initialPassword String?
   active    Boolean          @default(true)
 
   assignments     EmployeeAssignment[]
@@ -359,6 +363,8 @@ model Announcement {
   message        String
   imageUrl       String?
   visibilityType String    @default("ALL")
+  priority       Int       @default(2)
+  targetRoleType EmployeeRoleType?
   startDate      DateTime?
   endDate        DateTime?
   createdAt      DateTime  @default(now())

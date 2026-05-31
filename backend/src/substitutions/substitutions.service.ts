@@ -139,6 +139,49 @@ export class SubstitutionsService {
     }));
   }
 
+  async findBySubstitute(employeeId: string) {
+    await this.autoAcceptExpired();
+
+    const substitutions = await this.prisma.substitution.findMany({
+      where: {
+        substituteTeacherId: employeeId,
+        status: {
+          in: [
+            SubstitutionStatus.PENDING_DIRECTOR,
+            SubstitutionStatus.SENT_TO_TEACHER,
+            SubstitutionStatus.ACCEPTED,
+            SubstitutionStatus.DECLINED,
+          ],
+        },
+      },
+      include: {
+        absence: {
+          include: {
+            employee: {
+              include: {
+                school: true,
+              },
+            },
+          },
+        },
+        classSchedule: {
+          include: {
+            class: true,
+          },
+        },
+        timeSlot: true,
+        scoreDetails: true,
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
+
+    return Promise.all(
+      substitutions.map((substitution) => this.attachTeachers(substitution)),
+    );
+  }
+
   async create(data: CreateSubstitutionInput) {
     if (!data.absenceId) {
       throw new BadRequestException('absenceId é obrigatório.');
@@ -309,6 +352,37 @@ export class SubstitutionsService {
     });
 
     return this.attachTeachers(accepted);
+  }
+
+  async decline(id: string) {
+    const substitution = await this.prisma.substitution.findUnique({
+      where: { id },
+    });
+
+    if (!substitution) {
+      throw new NotFoundException('Substituição não encontrada.');
+    }
+
+    const declined = await this.prisma.substitution.update({
+      where: { id },
+      data: {
+        status: SubstitutionStatus.DECLINED,
+        acceptedAt: null,
+        approvedBy: null,
+      },
+      include: {
+        absence: true,
+        classSchedule: {
+          include: {
+            class: true,
+          },
+        },
+        timeSlot: true,
+        scoreDetails: true,
+      },
+    });
+
+    return this.attachTeachers(declined);
   }
 
   async remove(id: string) {

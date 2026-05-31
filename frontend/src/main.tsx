@@ -12,6 +12,7 @@ import ClassesPage from './pages/ClassesPage';
 import SchoolsPage from './pages/SchoolsPage';
 import SettingsPage from './pages/SettingsPage';
 import AnnouncementsPage from './pages/AnnouncementsPage';
+import PortalPage from './pages/PortalPage';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import {
@@ -119,6 +120,7 @@ function Layout() {
 
         <Routes>
           <Route path="/servidores/:employeeId/planner" element={<EmployeePlannerPage />} />
+          <Route path="/portal" element={<PortalPage />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/mensagens" element={<AnnouncementsPage />} />
   	  <Route path="/escolas" element={<SchoolsPage />} />          

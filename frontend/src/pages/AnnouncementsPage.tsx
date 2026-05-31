@@ -13,6 +13,8 @@ type Announcement = {
   title: string;
   message: string;
   visibilityType: string;
+  priority: number;
+  targetRoleType?: string | null;
   startDate?: string | null;
   endDate?: string | null;
   createdAt: string;
@@ -66,6 +68,8 @@ export default function AnnouncementsPage() {
   const [message, setMessage] = useState('');
   const [schoolId, setSchoolId] = useState('');
   const [visibilityType, setVisibilityType] = useState('ALL');
+  const [targetRoleType, setTargetRoleType] = useState('');
+  const [priority, setPriority] = useState(2);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
 
@@ -86,6 +90,8 @@ export default function AnnouncementsPage() {
       setMessage('');
       setSchoolId('');
       setVisibilityType('ALL');
+      setTargetRoleType('');
+      setPriority(2);
       setStartDate('');
       setEndDate('');
       await queryClient.invalidateQueries({ queryKey: ['announcements'] });
@@ -111,6 +117,8 @@ export default function AnnouncementsPage() {
       message,
       schoolId: schoolId || null,
       visibilityType,
+      targetRoleType: targetRoleType || null,
+      priority,
       startDate: startDate ? `${startDate}T00:00:00.000Z` : null,
       endDate: endDate ? `${endDate}T23:59:59.000Z` : null,
       createdBy: 'Direção',
@@ -188,6 +196,36 @@ export default function AnnouncementsPage() {
               </select>
             </div>
 
+            <div>
+              <label className="text-sm font-medium">Grupo de função</label>
+              <select
+                value={targetRoleType}
+                onChange={(event) => setTargetRoleType(event.target.value)}
+                className="mt-1 w-full border rounded-xl px-3 py-2 text-sm"
+              >
+                <option value="">Todos os cargos</option>
+                <option value="PROFESSOR">Professores</option>
+                <option value="AUXILIAR">Auxiliares</option>
+                <option value="SERVICOS_GERAIS">Serviços gerais</option>
+                <option value="SECRETARIA">Secretaria</option>
+                <option value="DIRETOR">Direção</option>
+                <option value="ORIENTADOR">Orientação</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="text-sm font-medium">Prioridade</label>
+              <select
+                value={priority}
+                onChange={(event) => setPriority(Number(event.target.value))}
+                className="mt-1 w-full border rounded-xl px-3 py-2 text-sm"
+              >
+                <option value={1}>Alta</option>
+                <option value={2}>Média</option>
+                <option value={3}>Baixa</option>
+              </select>
+            </div>
+
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-sm font-medium">Início</label>
@@ -261,6 +299,12 @@ export default function AnnouncementsPage() {
                   <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-500">
                     <span className="rounded-full bg-white px-2 py-1">
                       {translateVisibility(announcement.visibilityType)}
+                    </span>
+                    <span className="rounded-full bg-white px-2 py-1">
+                      Prioridade {announcement.priority === 1 ? 'alta' : announcement.priority === 2 ? 'média' : 'baixa'}
+                    </span>
+                    <span className="rounded-full bg-white px-2 py-1">
+                      {announcement.targetRoleType?.replace(/_/g, ' ') ?? 'Todos os cargos'}
                     </span>
                     <span className="rounded-full bg-white px-2 py-1">
                       {announcement.school?.name ?? 'Todas as escolas'}

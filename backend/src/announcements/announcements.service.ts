@@ -53,12 +53,12 @@ export class AnnouncementsService {
         targets: true,
       },
       orderBy: {
-        createdAt: 'desc',
+        priority: 'asc',
       },
     });
   }
 
-  findActive() {
+  findActive(filters?: { roleType?: string; schoolId?: string }) {
     const now = new Date();
 
     return this.prisma.announcement.findMany({
@@ -86,6 +86,33 @@ export class AnnouncementsService {
               },
             ],
           },
+          {
+            OR: [
+              {
+                targetRoleType: null,
+              },
+              filters?.roleType
+                ? {
+                    targetRoleType:
+                      filters.roleType === 'COORDENADOR'
+                        ? 'ORIENTADOR'
+                        : (filters.roleType as any),
+                  }
+                : {},
+            ],
+          },
+          {
+            OR: [
+              {
+                schoolId: null,
+              },
+              filters?.schoolId
+                ? {
+                    schoolId: filters.schoolId,
+                  }
+                : {},
+            ],
+          },
         ],
       },
       include: {
@@ -93,7 +120,7 @@ export class AnnouncementsService {
         targets: true,
       },
       orderBy: {
-        createdAt: 'desc',
+        priority: 'asc',
       },
     });
   }
@@ -118,6 +145,12 @@ export class AnnouncementsService {
         message: data.message,
         imageUrl: data.imageUrl || null,
         visibilityType: data.visibilityType || 'ALL',
+        priority: Number(data.priority || 2),
+        targetRoleType: data.targetRoleType
+          ? data.targetRoleType === 'COORDENADOR'
+            ? 'ORIENTADOR'
+            : data.targetRoleType
+          : null,
         startDate: data.startDate ? new Date(data.startDate) : null,
         endDate: data.endDate ? new Date(data.endDate) : null,
       },
