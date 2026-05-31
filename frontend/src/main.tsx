@@ -120,7 +120,6 @@ function Layout() {
 
         <Routes>
           <Route path="/servidores/:employeeId/planner" element={<EmployeePlannerPage />} />
-          <Route path="/portal" element={<PortalPage />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/mensagens" element={<AnnouncementsPage />} />
   	  <Route path="/escolas" element={<SchoolsPage />} />          
@@ -135,6 +134,15 @@ function Layout() {
         </Routes>
       </main>
     </div>
+  );
+}
+
+function App() {
+  return (
+    <Routes>
+      <Route path="/portal" element={<PortalPage />} />
+      <Route path="/*" element={<Layout />} />
+    </Routes>
   );
 }
 
@@ -226,7 +234,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
 <React.StrictMode>
   <QueryClientProvider client={queryClient}>
     <BrowserRouter>
-      <Layout />
+      <App />
     </BrowserRouter>
   </QueryClientProvider>
 </React.StrictMode>
