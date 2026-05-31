@@ -104,6 +104,8 @@ export default function PortalPage() {
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [substitutions, setSubstitutions] = useState<Substitution[]>([]);
   const [loading, setLoading] = useState(false);
+  const [announcementsError, setAnnouncementsError] = useState('');
+  const [substitutionsError, setSubstitutionsError] = useState('');
 
   const employee = user?.employee ?? null;
   const pendingSubstitutions = useMemo(
@@ -112,13 +114,28 @@ export default function PortalPage() {
   );
 
   async function loadPortalData(currentEmployee: PortalEmployee) {
-    const [loadedAnnouncements, loadedSubstitutions] = await Promise.all([
-      getAnnouncements(currentEmployee),
-      getSubstitutions(currentEmployee.id),
-    ]);
+    setAnnouncementsError('');
+    setSubstitutionsError('');
 
-    setAnnouncements(loadedAnnouncements);
-    setSubstitutions(loadedSubstitutions);
+    try {
+      const loadedAnnouncements = await getAnnouncements(currentEmployee);
+      setAnnouncements(loadedAnnouncements);
+    } catch (error: any) {
+      setAnnouncements([]);
+      setAnnouncementsError(
+        error?.response?.data?.message ?? 'Erro ao carregar mensagens.',
+      );
+    }
+
+    try {
+      const loadedSubstitutions = await getSubstitutions(currentEmployee.id);
+      setSubstitutions(loadedSubstitutions);
+    } catch (error: any) {
+      setSubstitutions([]);
+      setSubstitutionsError(
+        error?.response?.data?.message ?? 'Erro ao carregar substituições.',
+      );
+    }
   }
 
   async function handleLogin() {
@@ -199,6 +216,12 @@ export default function PortalPage() {
         <div className="rounded-2xl border bg-white p-5 shadow-sm">
           <h2 className="font-semibold">Quadro de mensagens</h2>
           <div className="mt-4 grid gap-3">
+            {announcementsError && (
+              <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+                {announcementsError}
+              </div>
+            )}
+
             {announcements.map((announcement) => (
               <article
                 key={announcement.id}
@@ -220,7 +243,7 @@ export default function PortalPage() {
               </article>
             ))}
 
-            {announcements.length === 0 && (
+            {!announcementsError && announcements.length === 0 && (
               <div className="rounded-xl border bg-slate-50 p-4 text-sm text-slate-500">
                 Nenhuma mensagem disponível.
               </div>
@@ -231,6 +254,12 @@ export default function PortalPage() {
         <div className="rounded-2xl border bg-white p-5 shadow-sm">
           <h2 className="font-semibold">Substituições</h2>
           <div className="mt-4 grid gap-3">
+            {substitutionsError && (
+              <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+                {substitutionsError}
+              </div>
+            )}
+
             {pendingSubstitutions.map((substitution) => (
               <div key={substitution.id} className="rounded-xl border bg-slate-50 p-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
@@ -263,7 +292,7 @@ export default function PortalPage() {
               </div>
             ))}
 
-            {pendingSubstitutions.length === 0 && (
+            {!substitutionsError && pendingSubstitutions.length === 0 && (
               <div className="rounded-xl border bg-slate-50 p-4 text-sm text-slate-500">
                 Nenhuma substituição atribuída.
               </div>

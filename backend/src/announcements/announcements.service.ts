@@ -60,6 +60,33 @@ export class AnnouncementsService {
 
   findActive(filters?: { roleType?: string; schoolId?: string }) {
     const now = new Date();
+    const roleType = filters?.roleType
+      ? filters.roleType === 'COORDENADOR'
+        ? 'ORIENTADOR'
+        : filters.roleType
+      : null;
+    const audienceFilters: any[] = [
+      {
+        targetRoleType: null,
+      },
+    ];
+    const schoolFilters: any[] = [
+      {
+        schoolId: null,
+      },
+    ];
+
+    if (roleType) {
+      audienceFilters.push({
+        targetRoleType: roleType,
+      });
+    }
+
+    if (filters?.schoolId) {
+      schoolFilters.push({
+        schoolId: filters.schoolId,
+      });
+    }
 
     return this.prisma.announcement.findMany({
       where: {
@@ -87,31 +114,10 @@ export class AnnouncementsService {
             ],
           },
           {
-            OR: [
-              {
-                targetRoleType: null,
-              },
-              filters?.roleType
-                ? {
-                    targetRoleType:
-                      filters.roleType === 'COORDENADOR'
-                        ? 'ORIENTADOR'
-                        : (filters.roleType as any),
-                  }
-                : {},
-            ],
+            OR: audienceFilters,
           },
           {
-            OR: [
-              {
-                schoolId: null,
-              },
-              filters?.schoolId
-                ? {
-                    schoolId: filters.schoolId,
-                  }
-                : {},
-            ],
+            OR: schoolFilters,
           },
         ],
       },
