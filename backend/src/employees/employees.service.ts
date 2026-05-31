@@ -55,7 +55,7 @@ export class EmployeesService {
     return Array.from({ length: 8 }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join('');
   }
 
-  private buildLoginEmail(data: { email?: string; cpf?: string; name: string }) {
+  private buildLoginEmail(data: { email?: string | null; cpf?: string | null; name: string }) {
     if (data.email?.trim()) {
       return data.email.trim().toLowerCase();
     }
@@ -73,6 +73,36 @@ export class EmployeesService {
       .replace(/(^\.|\.$)/g, '');
 
     return `${slug || randomUUID()}@sige.local`;
+  }
+
+  private async buildUniqueLoginEmail(
+    client: Pick<PrismaService, 'user'>,
+    tenantId: string,
+    data: { email?: string | null; cpf?: string | null; name: string },
+    ignoredUserId?: string | null,
+  ) {
+    const baseEmail = this.buildLoginEmail(data);
+    const [localPart, domain = 'sige.local'] = baseEmail.split('@');
+
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      const candidate =
+        attempt === 0
+          ? baseEmail
+          : `${localPart}.${String(attempt + 1).padStart(2, '0')}@${domain}`;
+      const existing = await client.user.findFirst({
+        where: {
+          tenantId,
+          email: candidate,
+          id: ignoredUserId ? { not: ignoredUserId } : undefined,
+        },
+      });
+
+      if (!existing) {
+        return candidate;
+      }
+    }
+
+    return `${localPart}.${randomUUID().slice(0, 8)}@${domain}`;
   }
 
   private async findOrCreateRole(tenantId: string, roleType: string) {
@@ -138,7 +168,7 @@ export class EmployeesService {
   }) {
     const tenantId = await this.resolveTenantId(data.tenantId);
     const roleType = this.normalizeRoleType(data.roleType);
-    const loginEmail = this.buildLoginEmail(data);
+    const loginEmail = await this.buildUniqueLoginEmail(this.prisma, tenantId!, data);
     const initialPassword = this.generatePassword();
     const role = await this.findOrCreateRole(tenantId!, roleType);
     const passwordHash = await bcrypt.hash(initialPassword, 10);
@@ -201,6 +231,97 @@ export class EmployeesService {
           },
         },
       },
+    });
+  }
+
+  async generateAccess(id: string) {
+    const employee = await this.prisma.employee.findUnique({
+      where: { id },
+      include: {
+        school: true,
+        user: {
+          include: {
+            role: true,
+          },
+        },
+      },
+    });
+
+    if (!employee) {
+      throw new Error('Servidor não encontrado.');
+    }
+
+    const roleType = this.normalizeRoleType(employee.roleType);
+    const role = await this.findOrCreateRole(employee.tenantId, roleType);
+    const loginEmail = await this.buildUniqueLoginEmail(
+      this.prisma,
+      employee.tenantId,
+      employee,
+      employee.userId,
+    );
+    const initialPassword = this.generatePassword();
+    const passwordHash = await bcrypt.hash(initialPassword, 10);
+
+    return this.prisma.$transaction(async (transaction) => {
+      if (employee.userId) {
+        await transaction.user.update({
+          where: { id: employee.userId },
+          data: {
+            name: employee.name,
+            email: loginEmail,
+            phone: employee.phone || null,
+            passwordHash,
+            roleId: role.id,
+            active: true,
+          },
+        });
+
+        return transaction.employee.update({
+          where: { id },
+          data: {
+            roleType: roleType as any,
+            loginEmail,
+            initialPassword,
+          },
+          include: {
+            school: true,
+            user: {
+              include: {
+                role: true,
+              },
+            },
+          },
+        });
+      }
+
+      const user = await transaction.user.create({
+        data: {
+          tenantId: employee.tenantId,
+          name: employee.name,
+          email: loginEmail,
+          phone: employee.phone || null,
+          passwordHash,
+          roleId: role.id,
+        },
+      });
+
+      return transaction.employee.update({
+        where: { id },
+        data: {
+          roleType: roleType as any,
+          userId: user.id,
+          loginEmail,
+          initialPassword,
+        },
+        include: {
+          school: true,
+          user: {
+            include: {
+              role: true,
+            },
+          },
+        },
+      });
     });
   }
 

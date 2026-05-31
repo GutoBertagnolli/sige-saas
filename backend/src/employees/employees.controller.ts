@@ -20,6 +20,11 @@ export class EmployeesController {
     return this.service.update(id, body);
   }
 
+  @Post(':id/access')
+  generateAccess(@Param('id') id: string) {
+    return this.service.generateAccess(id);
+  }
+
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.service.remove(id);

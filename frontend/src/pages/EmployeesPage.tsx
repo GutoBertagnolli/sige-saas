@@ -66,6 +66,11 @@ async function deleteEmployee(id: string) {
   return response.data;
 }
 
+async function generateEmployeeAccess(id: string) {
+  const response = await api.post<Employee>(`/employees/${id}/access`);
+  return response.data;
+}
+
 export default function EmployeesPage() {
   const queryClient = useQueryClient();
 
@@ -112,6 +117,17 @@ export default function EmployeesPage() {
     },
     onError: () => {
       alert('Erro ao excluir servidor.');
+    },
+  });
+
+  const generateAccessMutation = useMutation({
+    mutationFn: generateEmployeeAccess,
+    onSuccess: async (employee) => {
+      setCreatedCredentials(employee);
+      await queryClient.invalidateQueries({ queryKey: ['employees'] });
+    },
+    onError: () => {
+      alert('Erro ao gerar acesso do servidor.');
     },
   });
 
@@ -224,7 +240,7 @@ export default function EmployeesPage() {
               </div>
             </div>
             <div className="mt-2 text-xs text-green-700">
-              Guarde estes dados para envio por WhatsApp/e-mail quando a integração estiver habilitada.
+              Guarde estes dados para entregar ao servidor. O envio por WhatsApp/e-mail ficará para a próxima etapa.
             </div>
           </div>
         )}
@@ -240,9 +256,10 @@ export default function EmployeesPage() {
                   <th className="text-left py-3">CPF</th>
                   <th className="text-left py-3">Escola</th>
                   <th className="text-left py-3">Função</th>
-		  <th className="text-left py-3">Telefone</th>
+                  <th className="text-left py-3">Telefone</th>
                   <th className="text-left py-3">E-mail</th>
                   <th className="text-left py-3">Login</th>
+                  <th className="text-left py-3">Senha inicial</th>
                   <th className="text-right py-3">Ações</th>
                 </tr>
               </thead>
@@ -256,11 +273,22 @@ export default function EmployeesPage() {
                     <td className="py-3">
 		    {employee.roleType === 'SERVICOS_GERAIS' ? 'Serviços Gerais' : employee.roleType?.replace(/_/g, ' ') || 'PROFESSOR'}
 </td>
- 		    <td className="py-3">{employee.phone || '-'}</td>
+                    <td className="py-3">{employee.phone || '-'}</td>
                     <td className="py-3">{employee.email || '-'}</td>
                     <td className="py-3">{employee.loginEmail || employee.user?.email || '-'}</td>
+                    <td className="py-3 font-mono">{employee.initialPassword || '-'}</td>
                     <td className="py-3">
                       <div className="flex justify-end gap-2">
+                        {(!employee.loginEmail || !employee.initialPassword) && (
+                          <button
+                            className="px-3 py-1.5 rounded-lg border border-green-200 text-green-700 text-xs hover:bg-green-50 disabled:opacity-60"
+                            disabled={generateAccessMutation.isPending}
+                            onClick={() => generateAccessMutation.mutate(employee.id)}
+                          >
+                            Gerar acesso
+                          </button>
+                        )}
+
                         <button
                           className="px-3 py-1.5 rounded-lg border text-xs hover:bg-slate-50"
                           onClick={() => openEditModal(employee)}
@@ -288,7 +316,7 @@ export default function EmployeesPage() {
 
                 {filteredEmployees.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="py-6 text-center text-slate-500">
+                    <td colSpan={9} className="py-6 text-center text-slate-500">
                       Nenhum servidor encontrado.
                     </td>
                   </tr>
