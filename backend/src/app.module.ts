@@ -13,11 +13,13 @@ import { UsersModule } from './users/users.module';
 import { SchoolsModule } from './schools/schools.module';
 import { TimeTemplatesModule } from './time-templates/time-templates.module';
 import { SettingsModule } from './settings/settings.module';
+import { AnnouncementsModule } from './announcements/announcements.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     AvailabilityModule,
+    AnnouncementsModule,
     EmployeeWeeklySchedulesModule,
     PrismaModule,
     AbsencesModule,

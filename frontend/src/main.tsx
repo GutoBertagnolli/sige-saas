@@ -1,6 +1,7 @@
 import {
   QueryClient,
   QueryClientProvider,
+  useQuery,
 } from '@tanstack/react-query';
 import AbsencesPage from './pages/AbsencesPage';
 import SubstitutionsPage from './pages/SubstitutionsPage';
@@ -10,6 +11,7 @@ import TimeTemplatesPage from './pages/TimeTemplatesPage';
 import ClassesPage from './pages/ClassesPage';
 import SchoolsPage from './pages/SchoolsPage';
 import SettingsPage from './pages/SettingsPage';
+import AnnouncementsPage from './pages/AnnouncementsPage';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import {
@@ -30,6 +32,7 @@ import {
 } from 'react-router-dom';
 import './index.css';
 import { APP_VERSION } from './version';
+import { api } from './services/api';
 
 const menu = [
   { label: 'Dashboard', path: '/dashboard' },
@@ -50,6 +53,20 @@ const cards = [
   { title: 'Escolas ativas', value: '1', icon: School },
   { title: 'Servidores cadastrados', value: '0', icon: Users },
 ];
+
+type DashboardAnnouncement = {
+  id: string;
+  title: string;
+  message: string;
+  school?: {
+    name: string;
+  } | null;
+};
+
+async function getActiveAnnouncements() {
+  const response = await api.get<DashboardAnnouncement[]>('/announcements/active');
+  return response.data;
+}
 
 function Layout() {
   const location = useLocation();
@@ -103,7 +120,7 @@ function Layout() {
         <Routes>
           <Route path="/servidores/:employeeId/planner" element={<EmployeePlannerPage />} />
           <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/mensagens" element={<SimplePage title="Mensagens" />} />
+          <Route path="/mensagens" element={<AnnouncementsPage />} />
   	  <Route path="/escolas" element={<SchoolsPage />} />          
           <Route path="/turmas" element={<ClassesPage />} />
           <Route path="/horarios" element={<TimeTemplatesPage />} />
@@ -120,6 +137,11 @@ function Layout() {
 }
 
 function Dashboard() {
+  const { data: announcements = [] } = useQuery({
+    queryKey: ['announcements', 'active'],
+    queryFn: getActiveAnnouncements,
+  });
+
   return (
     <>
       <section className="p-5 grid gap-4 md:grid-cols-4">
@@ -141,9 +163,27 @@ function Dashboard() {
             <Megaphone className="w-5 h-5" />
             <h2 className="font-semibold">Quadro de mensagens</h2>
           </div>
-          <div className="rounded-xl bg-slate-50 border p-4 text-sm text-slate-600">
-            Nenhum aviso publicado. Este será o mural inicial para secretaria,
-            direção e orientação.
+          <div className="grid gap-3">
+            {announcements.slice(0, 3).map((announcement) => (
+              <div
+                key={announcement.id}
+                className="rounded-xl bg-slate-50 border p-4 text-sm text-slate-600"
+              >
+                <div className="font-semibold text-slate-900">
+                  {announcement.title}
+                </div>
+                <div className="mt-1 line-clamp-3">{announcement.message}</div>
+                <div className="mt-2 text-xs text-slate-500">
+                  {announcement.school?.name ?? 'Todas as escolas'}
+                </div>
+              </div>
+            ))}
+
+            {announcements.length === 0 && (
+              <div className="rounded-xl bg-slate-50 border p-4 text-sm text-slate-600">
+                Nenhum aviso publicado.
+              </div>
+            )}
           </div>
         </div>
 

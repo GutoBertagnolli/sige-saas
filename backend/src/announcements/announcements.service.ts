@@ -1,0 +1,144 @@
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { PrismaService } from '../common/prisma.service';
+
+@Injectable()
+export class AnnouncementsService {
+  constructor(private prisma: PrismaService) {}
+
+  private async resolveTenantId(tenantId?: string) {
+    if (tenantId) {
+      const tenant = await this.prisma.tenant.findFirst({
+        where: {
+          id: tenantId,
+          active: true,
+        },
+      });
+
+      if (tenant) {
+        return tenant.id;
+      }
+    }
+
+    const defaultTenant = await this.prisma.tenant.findFirst({
+      where: {
+        slug: 'suportiva',
+        active: true,
+      },
+    });
+
+    if (defaultTenant) {
+      return defaultTenant.id;
+    }
+
+    const firstActiveTenant = await this.prisma.tenant.findFirst({
+      where: {
+        active: true,
+      },
+      orderBy: {
+        createdAt: 'asc',
+      },
+    });
+
+    if (!firstActiveTenant) {
+      throw new BadRequestException('Nenhum tenant ativo encontrado.');
+    }
+
+    return firstActiveTenant.id;
+  }
+
+  findAll() {
+    return this.prisma.announcement.findMany({
+      include: {
+        school: true,
+        targets: true,
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
+  }
+
+  findActive() {
+    const now = new Date();
+
+    return this.prisma.announcement.findMany({
+      where: {
+        OR: [
+          {
+            startDate: null,
+          },
+          {
+            startDate: {
+              lte: now,
+            },
+          },
+        ],
+        AND: [
+          {
+            OR: [
+              {
+                endDate: null,
+              },
+              {
+                endDate: {
+                  gte: now,
+                },
+              },
+            ],
+          },
+        ],
+      },
+      include: {
+        school: true,
+        targets: true,
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
+  }
+
+  async create(data: any) {
+    if (!data.title?.trim()) {
+      throw new BadRequestException('Título é obrigatório.');
+    }
+
+    if (!data.message?.trim()) {
+      throw new BadRequestException('Mensagem é obrigatória.');
+    }
+
+    const tenantId = await this.resolveTenantId(data.tenantId);
+
+    return this.prisma.announcement.create({
+      data: {
+        tenantId,
+        schoolId: data.schoolId || null,
+        createdBy: data.createdBy || 'Direção',
+        title: data.title,
+        message: data.message,
+        imageUrl: data.imageUrl || null,
+        visibilityType: data.visibilityType || 'ALL',
+        startDate: data.startDate ? new Date(data.startDate) : null,
+        endDate: data.endDate ? new Date(data.endDate) : null,
+      },
+      include: {
+        school: true,
+        targets: true,
+      },
+    });
+  }
+
+  async remove(id: string) {
+    const announcement = await this.prisma.announcement.findUnique({
+      where: { id },
+    });
+
+    if (!announcement) {
+      throw new NotFoundException('Aviso não encontrado.');
+    }
+
+    return this.prisma.announcement.delete({
+      where: { id },
+    });
+  }
+}
