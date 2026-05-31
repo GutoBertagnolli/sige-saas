@@ -53,15 +53,84 @@ function formatDate(value?: string) {
   return new Date(value).toLocaleDateString();
 }
 
+const WEEKDAY_LABELS: Record<string, string> = {
+  MONDAY: 'Segunda-feira',
+  TUESDAY: 'Terça-feira',
+  WEDNESDAY: 'Quarta-feira',
+  THURSDAY: 'Quinta-feira',
+  FRIDAY: 'Sexta-feira',
+  SATURDAY: 'Sábado',
+  SUNDAY: 'Domingo',
+};
+
+const STATUS_LABELS: Record<string, string> = {
+  PENDING_DIRECTOR: 'Pendente direção',
+  SENT_TO_TEACHER: 'Enviado ao professor',
+  ACCEPTED: 'Aceito',
+  DECLINED: 'Recusado',
+  CANCELLED: 'Cancelado',
+};
+
+const ROLE_LABELS: Record<string, string> = {
+  PROFESSOR: 'Professor',
+  AUXILIAR: 'Auxiliar',
+  ORIENTADOR: 'Orientador',
+  DIRETOR: 'Diretor',
+  COORDENADOR: 'Coordenador',
+  SECRETARIA: 'Secretaria',
+  SERVICOS_GERAIS: 'Serviços gerais',
+};
+
+const SUBSTITUTE_ROW_COLORS = [
+  'bg-blue-50 border-l-4 border-l-blue-500',
+  'bg-emerald-50 border-l-4 border-l-emerald-500',
+  'bg-amber-50 border-l-4 border-l-amber-500',
+  'bg-violet-50 border-l-4 border-l-violet-500',
+  'bg-rose-50 border-l-4 border-l-rose-500',
+  'bg-cyan-50 border-l-4 border-l-cyan-500',
+];
+
+function translateWeekday(value?: string | null) {
+  return value ? WEEKDAY_LABELS[value] ?? value : 'Dia não informado';
+}
+
+function translateStatus(value?: string | null) {
+  return value ? STATUS_LABELS[value] ?? value : '-';
+}
+
+function translateRole(value?: string | null) {
+  return value ? ROLE_LABELS[value] ?? value.replace(/_/g, ' ') : '-';
+}
+
 function formatSchedule(substitution: Substitution) {
   const time = substitution.timeSlot
     ? `${substitution.timeSlot.startTime} - ${substitution.timeSlot.endTime}`
     : 'Horário não informado';
 
-  const weekday = substitution.weekday ?? 'Dia não informado';
+  const weekday = translateWeekday(substitution.weekday);
   const className = substitution.classSchedule?.class?.name;
 
   return [weekday, time, className].filter(Boolean).join(' • ');
+}
+
+function getSubstituteColorMap(substitutions: Substitution[]) {
+  const colorBySubstitute = new Map<string, string>();
+
+  substitutions.forEach((substitution) => {
+    const substituteKey =
+      substitution.substituteTeacher?.id ??
+      substitution.substituteTeacher?.name ??
+      substitution.id;
+
+    if (!colorBySubstitute.has(substituteKey)) {
+      colorBySubstitute.set(
+        substituteKey,
+        SUBSTITUTE_ROW_COLORS[colorBySubstitute.size % SUBSTITUTE_ROW_COLORS.length],
+      );
+    }
+  });
+
+  return colorBySubstitute;
 }
 
 export default function SubstitutionsPage() {
@@ -71,6 +140,8 @@ export default function SubstitutionsPage() {
     queryKey: ['substitutions'],
     queryFn: getSubstitutions,
   });
+
+  const substitutionRowColors = getSubstituteColorMap(substitutions);
 
   const deleteMutation = useMutation({
     mutationFn: deleteSubstitution,
@@ -123,21 +194,30 @@ export default function SubstitutionsPage() {
                   <th className="text-left py-3">Servidor original</th>
                   <th className="text-left py-3">Horário</th>
                   <th className="text-left py-3">Período do afastamento</th>
-                  <th className="text-left py-3">Status</th>
+                  <th className="text-left py-3">Situação</th>
                   <th className="text-left py-3">Pontuação</th>
                   <th className="text-left py-3">Ações</th>
                 </tr>
               </thead>
 
               <tbody>
-                {substitutions.map((substitution) => (
-                  <tr key={substitution.id} className="border-b">
-                    <td className="py-3">
+                {substitutions.map((substitution) => {
+                  const substituteKey =
+                    substitution.substituteTeacher?.id ??
+                    substitution.substituteTeacher?.name ??
+                    substitution.id;
+                  const rowColor =
+                    substitutionRowColors.get(substituteKey) ??
+                    'bg-white border-l-4 border-l-transparent';
+
+                  return (
+                  <tr key={substitution.id} className={`border-b ${rowColor}`}>
+                    <td className="py-3 px-2">
                       <div className="font-medium">
                         {substitution.substituteTeacher?.name ?? 'Não definido'}
                       </div>
                       <div className="text-xs text-slate-500">
-                        {substitution.substituteTeacher?.roleType?.replace(/_/g, ' ') ?? '-'}
+                        {translateRole(substitution.substituteTeacher?.roleType)}
                       </div>
                     </td>
                     <td className="py-3">
@@ -154,7 +234,7 @@ export default function SubstitutionsPage() {
                     </td>
                     <td className="py-3">
                       <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-medium">
-                        {substitution.status}
+                        {translateStatus(substitution.status)}
                       </span>
                     </td>
                     <td className="py-3">{substitution.score}</td>
@@ -168,7 +248,8 @@ export default function SubstitutionsPage() {
                       </button>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
 
                 {substitutions.length === 0 && (
                   <tr>

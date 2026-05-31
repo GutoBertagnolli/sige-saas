@@ -13,11 +13,65 @@ export class AbsencesService {
             school: true,
           },
         },
-        substitutions: true,
+        substitutions: {
+          include: {
+            classSchedule: {
+              include: {
+                class: true,
+              },
+            },
+            timeSlot: true,
+            scoreDetails: true,
+          },
+          orderBy: [
+            { weekday: 'asc' },
+            { timeSlot: { slotOrder: 'asc' } },
+          ],
+        },
       },
       orderBy: {
         startDate: 'desc',
       },
+    }).then(async (absences) => {
+      const employeeIds = Array.from(
+        new Set(
+          absences
+            .flatMap((absence) =>
+              absence.substitutions.flatMap((substitution) => [
+                substitution.originalTeacherId,
+                substitution.substituteTeacherId,
+              ]),
+            )
+            .filter(Boolean) as string[],
+        ),
+      );
+
+      const employees = await this.prisma.employee.findMany({
+        where: {
+          id: {
+            in: employeeIds,
+          },
+        },
+        include: {
+          school: true,
+        },
+      });
+
+      const employeeById = new Map(
+        employees.map((employee) => [employee.id, employee]),
+      );
+
+      return absences.map((absence) => ({
+        ...absence,
+        substitutions: absence.substitutions.map((substitution) => ({
+          ...substitution,
+          originalTeacher:
+            employeeById.get(substitution.originalTeacherId) ?? null,
+          substituteTeacher: substitution.substituteTeacherId
+            ? employeeById.get(substitution.substituteTeacherId) ?? null
+            : null,
+        })),
+      }));
     });
   }
 

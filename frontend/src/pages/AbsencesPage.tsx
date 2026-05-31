@@ -119,14 +119,85 @@ function getSubstitutionKey(substitution: Substitution) {
   ].join('|');
 }
 
+const WEEKDAY_LABELS: Record<string, string> = {
+  MONDAY: 'Segunda-feira',
+  TUESDAY: 'Terça-feira',
+  WEDNESDAY: 'Quarta-feira',
+  THURSDAY: 'Quinta-feira',
+  FRIDAY: 'Sexta-feira',
+  SATURDAY: 'Sábado',
+  SUNDAY: 'Domingo',
+};
+
+const STATUS_LABELS: Record<string, string> = {
+  OPEN: 'Aberto',
+  SUBSTITUTIONS_GENERATED: 'Substituições geradas',
+  PENDING_DIRECTOR: 'Pendente direção',
+  SENT_TO_TEACHER: 'Enviado ao professor',
+  ACCEPTED: 'Aceito',
+  DECLINED: 'Recusado',
+  CANCELLED: 'Cancelado',
+};
+
+const ROLE_LABELS: Record<string, string> = {
+  PROFESSOR: 'Professor',
+  AUXILIAR: 'Auxiliar',
+  ORIENTADOR: 'Orientador',
+  DIRETOR: 'Diretor',
+  COORDENADOR: 'Coordenador',
+  SECRETARIA: 'Secretaria',
+  SERVICOS_GERAIS: 'Serviços gerais',
+};
+
+const SUBSTITUTE_ROW_COLORS = [
+  'bg-blue-50 border-l-4 border-l-blue-500',
+  'bg-emerald-50 border-l-4 border-l-emerald-500',
+  'bg-amber-50 border-l-4 border-l-amber-500',
+  'bg-violet-50 border-l-4 border-l-violet-500',
+  'bg-rose-50 border-l-4 border-l-rose-500',
+  'bg-cyan-50 border-l-4 border-l-cyan-500',
+];
+
+function translateWeekday(value?: string | null) {
+  return value ? WEEKDAY_LABELS[value] ?? value : 'Dia não informado';
+}
+
+function translateStatus(value?: string | null) {
+  return value ? STATUS_LABELS[value] ?? value : '-';
+}
+
+function translateRole(value?: string | null) {
+  return value ? ROLE_LABELS[value] ?? value.replace(/_/g, ' ') : '-';
+}
+
 function formatSubstitutionSchedule(substitution: Substitution) {
-  const weekday = substitution.weekday ?? 'Dia não informado';
+  const weekday = translateWeekday(substitution.weekday);
   const time = substitution.timeSlot
     ? `${substitution.timeSlot.startTime} - ${substitution.timeSlot.endTime}`
     : 'Horário não informado';
   const className = substitution.classSchedule?.class?.name;
 
   return [weekday, time, className].filter(Boolean).join(' • ');
+}
+
+function getSubstituteColorMap(substitutions: Substitution[]) {
+  const colorBySubstitute = new Map<string, string>();
+
+  substitutions.forEach((substitution) => {
+    const substituteKey =
+      substitution.substituteTeacher?.id ??
+      substitution.substituteTeacher?.name ??
+      substitution.id;
+
+    if (!colorBySubstitute.has(substituteKey)) {
+      colorBySubstitute.set(
+        substituteKey,
+        SUBSTITUTE_ROW_COLORS[colorBySubstitute.size % SUBSTITUTE_ROW_COLORS.length],
+      );
+    }
+  });
+
+  return colorBySubstitute;
 }
 
 export default function AbsencesPage() {
@@ -188,6 +259,11 @@ export default function AbsencesPage() {
 
     return Array.from(substitutionsById.values());
   }, [absences, replacementSuggestions, selectedSubstitutions]);
+
+  const substitutionRowColors = useMemo(
+    () => getSubstituteColorMap(visibleSubstitutions),
+    [visibleSubstitutions],
+  );
 
   const substitutionMutation = useMutation({
     mutationFn: createSubstitution,
@@ -426,28 +502,44 @@ export default function AbsencesPage() {
                     <th className="text-left py-3">Substituto</th>
                     <th className="text-left py-3">Servidor original</th>
                     <th className="text-left py-3">Horário</th>
-                    <th className="text-left py-3">Status</th>
+                    <th className="text-left py-3">Situação</th>
                     <th className="text-left py-3">Ações</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {visibleSubstitutions.map((substitution) => (
-                    <tr key={substitution.id} className="border-b">
-                      <td className="py-3">{substitution.substituteTeacher?.name ?? '-'}</td>
-                      <td className="py-3">{substitution.originalTeacher?.name ?? '-'}</td>
-                      <td className="py-3">{formatSubstitutionSchedule(substitution)}</td>
-                      <td className="py-3">{substitution.status}</td>
-                      <td className="py-3">
-                        <button
-                          onClick={() => handleDeleteSubstitution(substitution)}
-                          disabled={deleteSubstitutionMutation.isPending}
-                          className="px-3 py-1 rounded-lg border border-red-200 text-xs text-red-700 hover:bg-red-50 disabled:opacity-60"
-                        >
-                          Apagar
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                  {visibleSubstitutions.map((substitution) => {
+                    const substituteKey =
+                      substitution.substituteTeacher?.id ??
+                      substitution.substituteTeacher?.name ??
+                      substitution.id;
+                    const rowColor =
+                      substitutionRowColors.get(substituteKey) ??
+                      'bg-white border-l-4 border-l-transparent';
+
+                    return (
+                      <tr key={substitution.id} className={`border-b ${rowColor}`}>
+                        <td className="py-3 px-2">
+                          {substitution.substituteTeacher?.name ?? '-'}
+                        </td>
+                        <td className="py-3">
+                          {substitution.originalTeacher?.name ?? '-'}
+                        </td>
+                        <td className="py-3">
+                          {formatSubstitutionSchedule(substitution)}
+                        </td>
+                        <td className="py-3">{translateStatus(substitution.status)}</td>
+                        <td className="py-3">
+                          <button
+                            onClick={() => handleDeleteSubstitution(substitution)}
+                            disabled={deleteSubstitutionMutation.isPending}
+                            className="px-3 py-1 rounded-lg border border-red-200 text-xs text-red-700 hover:bg-red-50 disabled:opacity-60"
+                          >
+                            Apagar
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -469,7 +561,7 @@ export default function AbsencesPage() {
                   >
                     <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
                       <div className="font-medium">
-                        {slot.weekday} • {slot.timeSlot?.startTime} - {slot.timeSlot?.endTime}
+                        {translateWeekday(slot.weekday)} • {slot.timeSlot?.startTime} - {slot.timeSlot?.endTime}
                         {slot.className ? ` • ${slot.className}` : ''}
                       </div>
 
@@ -498,7 +590,7 @@ export default function AbsencesPage() {
                             <div>
                               <div className="font-medium">{replacement.name}</div>
                               <div className="text-xs text-slate-500">
-                                {replacement.roleType?.replace(/_/g, ' ') || 'FUNÇÃO NÃO INFORMADA'} • {replacement.reason}
+                                {translateRole(replacement.roleType)} • {replacement.reason}
                               </div>
                             </div>
 
@@ -540,7 +632,7 @@ export default function AbsencesPage() {
                 <th className="text-left py-3">Início</th>
                 <th className="text-left py-3">Fim</th>
                 <th className="text-left py-3">Motivo</th>
-                <th className="text-left py-3">Status</th>
+                <th className="text-left py-3">Situação</th>
                 <th className="text-left py-3">Substituições</th>
                 <th className="text-left py-3">Ações</th>
               </tr>
@@ -551,7 +643,7 @@ export default function AbsencesPage() {
                 <tr key={absence.id} className="border-b">
                   <td className="py-3">{absence.employee?.name}</td>
                   <td className="py-3">
-                    {absence.employee?.roleType?.replace(/_/g, ' ') || '-'}
+                    {translateRole(absence.employee?.roleType)}
                   </td>
                   <td className="py-3">{absence.employee?.school?.name || '-'}</td>
                   <td className="py-3">
@@ -561,7 +653,7 @@ export default function AbsencesPage() {
                     {new Date(absence.endDate).toLocaleDateString()}
                   </td>
                   <td className="py-3">{absence.reason}</td>
-                  <td className="py-3">{absence.status}</td>
+                  <td className="py-3">{translateStatus(absence.status)}</td>
                   <td className="py-3">{absence.substitutions?.length ?? 0}</td>
                   <td className="py-3">
                     <div className="flex flex-wrap gap-2">
