@@ -69,6 +69,10 @@ type ReplacementSuggestion = {
   }>;
 };
 
+type SystemSettings = {
+  substitutionAcceptanceTimeoutMinutes: number;
+};
+
 async function getEmployees() {
   const response = await api.get<Employee[]>('/employees');
   return response.data;
@@ -106,6 +110,11 @@ async function acceptSubstitution(id: string) {
 
 async function getReplacementSuggestions(absenceId: string) {
   const response = await api.get<ReplacementSuggestion[]>(`/absences/${absenceId}/replacements`);
+  return response.data;
+}
+
+async function getSettings() {
+  const response = await api.get<SystemSettings>('/settings');
   return response.data;
 }
 
@@ -166,8 +175,6 @@ const SUBSTITUTE_ROW_COLORS = [
   'bg-cyan-50 border-l-4 border-l-cyan-500',
 ];
 
-const ACCEPTANCE_TIMEOUT_MINUTES = 30;
-
 function translateWeekday(value?: string | null) {
   return value ? WEEKDAY_LABELS[value] ?? value : 'Dia não informado';
 }
@@ -210,25 +217,29 @@ function getSubstituteColorMap(substitutions: Substitution[]) {
   return colorBySubstitute;
 }
 
-function getAcceptanceDeadline(substitution: Substitution) {
+function getAcceptanceDeadline(substitution: Substitution, timeoutMinutes: number) {
   if (!substitution.createdAt) {
     return null;
   }
 
   return new Date(
     new Date(substitution.createdAt).getTime() +
-      ACCEPTANCE_TIMEOUT_MINUTES * 60 * 1000,
+      timeoutMinutes * 60 * 1000,
   );
 }
 
-function formatAcceptanceTimer(substitution: Substitution, now: number) {
+function formatAcceptanceTimer(
+  substitution: Substitution,
+  now: number,
+  timeoutMinutes: number,
+) {
   if (substitution.status === 'ACCEPTED') {
     return substitution.approvedBy === 'AUTO'
       ? 'Aceita automaticamente'
       : 'Aceita pela direção';
   }
 
-  const deadline = getAcceptanceDeadline(substitution);
+  const deadline = getAcceptanceDeadline(substitution, timeoutMinutes);
 
   if (!deadline) {
     return 'Aguardando aceite';
@@ -280,6 +291,14 @@ export default function AbsencesPage() {
     queryKey: ['absences'],
     queryFn: getAbsences,
   });
+
+  const { data: settings } = useQuery({
+    queryKey: ['settings'],
+    queryFn: getSettings,
+  });
+
+  const acceptanceTimeoutMinutes =
+    settings?.substitutionAcceptanceTimeoutMinutes ?? 30;
 
   const selectedSlotKeys = useMemo(() => {
     const keys = new Set<string>();
@@ -606,7 +625,11 @@ export default function AbsencesPage() {
                         <td className="py-3">{translateStatus(substitution.status)}</td>
                         <td className="py-3">
                           <span className="rounded-full bg-white/70 px-2 py-1 text-xs font-medium">
-                            {formatAcceptanceTimer(substitution, now)}
+                            {formatAcceptanceTimer(
+                              substitution,
+                              now,
+                              acceptanceTimeoutMinutes,
+                            )}
                           </span>
                         </td>
                         <td className="py-3">

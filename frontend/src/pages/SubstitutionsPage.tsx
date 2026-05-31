@@ -38,6 +38,10 @@ type Substitution = {
   } | null;
 };
 
+type SystemSettings = {
+  substitutionAcceptanceTimeoutMinutes: number;
+};
+
 async function getSubstitutions() {
   const response = await api.get<Substitution[]>('/substitutions');
   return response.data;
@@ -50,6 +54,11 @@ async function deleteSubstitution(id: string) {
 
 async function acceptSubstitution(id: string) {
   const response = await api.put<Substitution>(`/substitutions/${id}/accept`);
+  return response.data;
+}
+
+async function getSettings() {
+  const response = await api.get<SystemSettings>('/settings');
   return response.data;
 }
 
@@ -98,8 +107,6 @@ const SUBSTITUTE_ROW_COLORS = [
   'bg-cyan-50 border-l-4 border-l-cyan-500',
 ];
 
-const ACCEPTANCE_TIMEOUT_MINUTES = 30;
-
 function translateWeekday(value?: string | null) {
   return value ? WEEKDAY_LABELS[value] ?? value : 'Dia não informado';
 }
@@ -143,25 +150,29 @@ function getSubstituteColorMap(substitutions: Substitution[]) {
   return colorBySubstitute;
 }
 
-function getAcceptanceDeadline(substitution: Substitution) {
+function getAcceptanceDeadline(substitution: Substitution, timeoutMinutes: number) {
   if (!substitution.createdAt) {
     return null;
   }
 
   return new Date(
     new Date(substitution.createdAt).getTime() +
-      ACCEPTANCE_TIMEOUT_MINUTES * 60 * 1000,
+      timeoutMinutes * 60 * 1000,
   );
 }
 
-function formatAcceptanceTimer(substitution: Substitution, now: number) {
+function formatAcceptanceTimer(
+  substitution: Substitution,
+  now: number,
+  timeoutMinutes: number,
+) {
   if (substitution.status === 'ACCEPTED') {
     return substitution.approvedBy === 'AUTO'
       ? 'Aceita automaticamente'
       : 'Aceita pela direção';
   }
 
-  const deadline = getAcceptanceDeadline(substitution);
+  const deadline = getAcceptanceDeadline(substitution, timeoutMinutes);
 
   if (!deadline) {
     return 'Aguardando aceite';
@@ -200,6 +211,14 @@ export default function SubstitutionsPage() {
     queryKey: ['substitutions'],
     queryFn: getSubstitutions,
   });
+
+  const { data: settings } = useQuery({
+    queryKey: ['settings'],
+    queryFn: getSettings,
+  });
+
+  const acceptanceTimeoutMinutes =
+    settings?.substitutionAcceptanceTimeoutMinutes ?? 30;
 
   const substitutionRowColors = getSubstituteColorMap(substitutions);
 
@@ -309,7 +328,13 @@ export default function SubstitutionsPage() {
                         {translateStatus(substitution.status)}
                       </span>
                     </td>
-                    <td className="py-3">{formatAcceptanceTimer(substitution, now)}</td>
+                    <td className="py-3">
+                      {formatAcceptanceTimer(
+                        substitution,
+                        now,
+                        acceptanceTimeoutMinutes,
+                      )}
+                    </td>
                     <td className="py-3">{substitution.score}</td>
                     <td className="py-3">
                       <div className="flex flex-wrap gap-2">

@@ -1,16 +1,20 @@
 import { Injectable } from '@nestjs/common';
 import { SubstitutionStatus } from '@prisma/client';
 import { PrismaService } from '../common/prisma.service';
-
-const ACCEPTANCE_TIMEOUT_MINUTES = 30;
+import { SettingsService } from '../settings/settings.service';
 
 @Injectable()
 export class AbsencesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private settings: SettingsService,
+  ) {}
 
   private async autoAcceptExpiredSubstitutions() {
+    const acceptanceTimeoutMinutes =
+      await this.settings.getSubstitutionAcceptanceTimeoutMinutes();
     const expiresBefore = new Date(
-      Date.now() - ACCEPTANCE_TIMEOUT_MINUTES * 60 * 1000,
+      Date.now() - acceptanceTimeoutMinutes * 60 * 1000,
     );
 
     await this.prisma.substitution.updateMany({

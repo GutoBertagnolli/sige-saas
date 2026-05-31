@@ -12,6 +12,7 @@ import { TenantsModule } from './tenants/tenants.module';
 import { UsersModule } from './users/users.module';
 import { SchoolsModule } from './schools/schools.module';
 import { TimeTemplatesModule } from './time-templates/time-templates.module';
+import { SettingsModule } from './settings/settings.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { TimeTemplatesModule } from './time-templates/time-templates.module';
     TenantsModule,
     UsersModule,
     SchoolsModule,
+    SettingsModule,
     TimeTemplatesModule,
     EmployeesModule,
   ],

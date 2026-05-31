@@ -9,6 +9,7 @@ import EmployeePlannerPage from './pages/EmployeePlannerPage';
 import TimeTemplatesPage from './pages/TimeTemplatesPage';
 import ClassesPage from './pages/ClassesPage';
 import SchoolsPage from './pages/SchoolsPage';
+import SettingsPage from './pages/SettingsPage';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import {
@@ -110,7 +111,7 @@ function Layout() {
 	  <Route path="/afastamentos" element={<AbsencesPage />} />          
           <Route path="/substituicoes" element={<SubstitutionsPage />} />
           <Route path="/relatorios" element={<SimplePage title="Relatórios" />} />
-          <Route path="/configuracoes" element={<SimplePage title="Configurações" />} />
+          <Route path="/configuracoes" element={<SettingsPage />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
       </main>
