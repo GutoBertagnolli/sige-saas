@@ -213,10 +213,31 @@ export default function EmployeePlannerPage() {
     );
   }
 
-  function buildCellsForTemplate(template: TimeTemplate) {
+  function getSlotMinutes(time: string) {
+    const [hours = '0', minutes = '0'] = time.split(':');
+    return Number(hours) * 60 + Number(minutes);
+  }
+
+  function getSlotsForShift(template: TimeTemplate, shift: string) {
+    if (template.shift !== 'INTEGRAL') {
+      return template.slots;
+    }
+
+    if (shift === 'MATUTINO') {
+      return template.slots.filter((slot) => getSlotMinutes(slot.startTime) < 12 * 60);
+    }
+
+    if (shift === 'VESPERTINO') {
+      return template.slots.filter((slot) => getSlotMinutes(slot.startTime) >= 12 * 60);
+    }
+
+    return template.slots;
+  }
+
+  function buildCellsForSlots(slotsToFill: Slot[]) {
     const newCells: LocalCell[] = [];
 
-    template.slots.forEach((slot) => {
+    slotsToFill.forEach((slot) => {
       WEEKDAYS.forEach((day) => {
         newCells.push({
           weekday: day.key,
@@ -230,18 +251,22 @@ export default function EmployeePlannerPage() {
     return newCells;
   }
 
-  function mergeTemplateCells(prev: LocalCell[], template: TimeTemplate) {
-    const templateSlotIds = new Set(template.slots.map((slot) => slot.id));
+  function buildCellsForTemplate(template: TimeTemplate) {
+    return buildCellsForSlots(template.slots);
+  }
+
+  function mergeSlots(prev: LocalCell[], slotsToFill: Slot[]) {
+    const slotIds = new Set(slotsToFill.map((slot) => slot.id));
     const withoutTemplateSlots = prev.filter(
-      (item) => !templateSlotIds.has(item.timeSlotId),
+      (item) => !slotIds.has(item.timeSlotId),
     );
 
-    return [...withoutTemplateSlots, ...buildCellsForTemplate(template)];
+    return [...withoutTemplateSlots, ...buildCellsForSlots(slotsToFill)];
   }
 
   function fillShift(shift: string) {
     const template =
-      selectedTemplate?.shift === shift
+      selectedTemplate?.shift === shift || selectedTemplate?.shift === 'INTEGRAL'
         ? selectedTemplate
         : templates.find((item) => item.shift === shift);
 
@@ -250,8 +275,15 @@ export default function EmployeePlannerPage() {
       return;
     }
 
+    const slotsToFill = getSlotsForShift(template, shift);
+
+    if (slotsToFill.length === 0) {
+      alert(`Nenhum horário encontrado para ${shift}.`);
+      return;
+    }
+
     setSelectedTemplateId(template.id);
-    setLocalCells((prev) => mergeTemplateCells(prev, template));
+    setLocalCells((prev) => mergeSlots(prev, slotsToFill));
   }
 
   function fillIntegral() {
