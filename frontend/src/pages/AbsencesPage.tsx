@@ -166,6 +166,29 @@ export default function AbsencesPage() {
     return keys;
   }, [absences, selectedSubstitutions]);
 
+  const visibleSubstitutions = useMemo(() => {
+    const activeAbsenceIds = new Set(
+      replacementSuggestions.map((slot) => slot.absenceId),
+    );
+    const substitutionsById = new Map<string, Substitution>();
+
+    for (const absence of absences) {
+      if (activeAbsenceIds.size > 0 && !activeAbsenceIds.has(absence.id)) {
+        continue;
+      }
+
+      for (const substitution of absence.substitutions ?? []) {
+        substitutionsById.set(substitution.id, substitution);
+      }
+    }
+
+    for (const substitution of selectedSubstitutions) {
+      substitutionsById.set(substitution.id, substitution);
+    }
+
+    return Array.from(substitutionsById.values());
+  }, [absences, replacementSuggestions, selectedSubstitutions]);
+
   const substitutionMutation = useMutation({
     mutationFn: createSubstitution,
     onSuccess: async (substitution) => {
@@ -174,8 +197,6 @@ export default function AbsencesPage() {
         ...current.filter((item) => item.id !== substitution.id),
       ]);
 
-      const selectedName = substitution.substituteTeacher?.name ?? 'Substituto selecionado';
-      alert(`${selectedName} foi selecionado para substituir neste horário.`);
       await queryClient.invalidateQueries({ queryKey: ['absences'] });
       await queryClient.invalidateQueries({ queryKey: ['substitutions'] });
     },
@@ -390,6 +411,49 @@ export default function AbsencesPage() {
           />
         </div>
 
+        {visibleSubstitutions.length > 0 && (
+          <div className="mb-6 border rounded-2xl p-5 bg-white">
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+              <h2 className="font-semibold">Tabela de substituições</h2>
+              <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700">
+                {visibleSubstitutions.length} selecionada(s)
+              </span>
+            </div>
+            <div className="overflow-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b">
+                    <th className="text-left py-3">Substituto</th>
+                    <th className="text-left py-3">Servidor original</th>
+                    <th className="text-left py-3">Horário</th>
+                    <th className="text-left py-3">Status</th>
+                    <th className="text-left py-3">Ações</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibleSubstitutions.map((substitution) => (
+                    <tr key={substitution.id} className="border-b">
+                      <td className="py-3">{substitution.substituteTeacher?.name ?? '-'}</td>
+                      <td className="py-3">{substitution.originalTeacher?.name ?? '-'}</td>
+                      <td className="py-3">{formatSubstitutionSchedule(substitution)}</td>
+                      <td className="py-3">{substitution.status}</td>
+                      <td className="py-3">
+                        <button
+                          onClick={() => handleDeleteSubstitution(substitution)}
+                          disabled={deleteSubstitutionMutation.isPending}
+                          className="px-3 py-1 rounded-lg border border-red-200 text-xs text-red-700 hover:bg-red-50 disabled:opacity-60"
+                        >
+                          Apagar
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
         {replacementSuggestions.length > 0 && (
           <div className="mb-6 border rounded-2xl p-5 bg-slate-50">
             <h2 className="font-semibold mb-3">Sugestões automáticas de substituição</h2>
@@ -462,44 +526,6 @@ export default function AbsencesPage() {
                   </div>
                 );
               })}
-            </div>
-          </div>
-        )}
-
-        {selectedSubstitutions.length > 0 && (
-          <div className="mb-6 border rounded-2xl p-5">
-            <h2 className="font-semibold mb-3">Substituições selecionadas nesta tela</h2>
-            <div className="overflow-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b">
-                    <th className="text-left py-3">Substituto</th>
-                    <th className="text-left py-3">Servidor original</th>
-                    <th className="text-left py-3">Horário</th>
-                    <th className="text-left py-3">Status</th>
-                    <th className="text-left py-3">Ações</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {selectedSubstitutions.map((substitution) => (
-                    <tr key={substitution.id} className="border-b">
-                      <td className="py-3">{substitution.substituteTeacher?.name ?? '-'}</td>
-                      <td className="py-3">{substitution.originalTeacher?.name ?? '-'}</td>
-                      <td className="py-3">{formatSubstitutionSchedule(substitution)}</td>
-                      <td className="py-3">{substitution.status}</td>
-                      <td className="py-3">
-                        <button
-                          onClick={() => handleDeleteSubstitution(substitution)}
-                          disabled={deleteSubstitutionMutation.isPending}
-                          className="px-3 py-1 rounded-lg border border-red-200 text-xs text-red-700 hover:bg-red-50 disabled:opacity-60"
-                        >
-                          Apagar
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
             </div>
           </div>
         )}
