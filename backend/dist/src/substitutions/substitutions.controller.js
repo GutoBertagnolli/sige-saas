@@ -25,6 +25,9 @@ let SubstitutionsController = class SubstitutionsController {
     create(body) {
         return this.service.create(body);
     }
+    remove(id) {
+        return this.service.remove(id);
+    }
 };
 exports.SubstitutionsController = SubstitutionsController;
 __decorate([
@@ -40,6 +43,13 @@ __decorate([
     __metadata("design:paramtypes", [Object]),
     __metadata("design:returntype", void 0)
 ], SubstitutionsController.prototype, "create", null);
+__decorate([
+    (0, common_1.Delete)(':id'),
+    __param(0, (0, common_1.Param)('id')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", void 0)
+], SubstitutionsController.prototype, "remove", null);
 exports.SubstitutionsController = SubstitutionsController = __decorate([
     (0, common_1.Controller)('substitutions'),
     __metadata("design:paramtypes", [substitutions_service_1.SubstitutionsService])

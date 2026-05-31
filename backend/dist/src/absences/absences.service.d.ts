@@ -4,24 +4,51 @@ export declare class AbsencesService {
     constructor(prisma: PrismaService);
     findAll(): import("@prisma/client").Prisma.PrismaPromise<({
         employee: {
+            school: {
+                id: string;
+                createdAt: Date;
+                name: string;
+                tenantId: string;
+                email: string | null;
+                phone: string | null;
+                active: boolean;
+                type: string;
+                address: string | null;
+                updatedAt: Date;
+            };
+        } & {
             id: string;
             name: string;
-            active: boolean;
             tenantId: string;
-            email: string | null;
-            phone: string | null;
             schoolId: string | null;
             roleType: import("@prisma/client").$Enums.EmployeeRoleType;
             cpf: string | null;
             birthDate: Date | null;
+            email: string | null;
+            phone: string | null;
             photoUrl: string | null;
+            active: boolean;
         };
+        substitutions: {
+            id: string;
+            absenceId: string;
+            classScheduleId: string | null;
+            timeSlotId: string | null;
+            weekday: import("@prisma/client").$Enums.Weekday | null;
+            originalTeacherId: string;
+            substituteTeacherId: string | null;
+            score: number;
+            status: import("@prisma/client").$Enums.SubstitutionStatus;
+            approvedBy: string | null;
+            acceptedAt: Date | null;
+            createdAt: Date;
+        }[];
     } & {
         id: string;
-        createdAt: Date;
-        type: string;
         status: import("@prisma/client").$Enums.AbsenceStatus;
+        createdAt: Date;
         employeeId: string;
+        type: string;
         startDate: Date;
         endDate: Date;
         reason: string | null;
@@ -30,24 +57,37 @@ export declare class AbsencesService {
     })[]>;
     create(data: any): import("@prisma/client").Prisma.Prisma__AbsenceClient<{
         employee: {
+            school: {
+                id: string;
+                createdAt: Date;
+                name: string;
+                tenantId: string;
+                email: string | null;
+                phone: string | null;
+                active: boolean;
+                type: string;
+                address: string | null;
+                updatedAt: Date;
+            };
+        } & {
             id: string;
             name: string;
-            active: boolean;
             tenantId: string;
-            email: string | null;
-            phone: string | null;
             schoolId: string | null;
             roleType: import("@prisma/client").$Enums.EmployeeRoleType;
             cpf: string | null;
             birthDate: Date | null;
+            email: string | null;
+            phone: string | null;
             photoUrl: string | null;
+            active: boolean;
         };
     } & {
         id: string;
-        createdAt: Date;
-        type: string;
         status: import("@prisma/client").$Enums.AbsenceStatus;
+        createdAt: Date;
         employeeId: string;
+        type: string;
         startDate: Date;
         endDate: Date;
         reason: string | null;
@@ -56,41 +96,54 @@ export declare class AbsencesService {
     }, never, import("@prisma/client/runtime/library").DefaultArgs, import("@prisma/client").Prisma.PrismaClientOptions>;
     update(id: string, data: any): import("@prisma/client").Prisma.Prisma__AbsenceClient<{
         employee: {
+            school: {
+                id: string;
+                createdAt: Date;
+                name: string;
+                tenantId: string;
+                email: string | null;
+                phone: string | null;
+                active: boolean;
+                type: string;
+                address: string | null;
+                updatedAt: Date;
+            };
+        } & {
             id: string;
             name: string;
-            active: boolean;
             tenantId: string;
-            email: string | null;
-            phone: string | null;
             schoolId: string | null;
             roleType: import("@prisma/client").$Enums.EmployeeRoleType;
             cpf: string | null;
             birthDate: Date | null;
+            email: string | null;
+            phone: string | null;
             photoUrl: string | null;
+            active: boolean;
         };
     } & {
         id: string;
-        createdAt: Date;
-        type: string;
         status: import("@prisma/client").$Enums.AbsenceStatus;
+        createdAt: Date;
         employeeId: string;
+        type: string;
         startDate: Date;
         endDate: Date;
         reason: string | null;
         documentUrl: string | null;
         createdBy: string | null;
     }, never, import("@prisma/client/runtime/library").DefaultArgs, import("@prisma/client").Prisma.PrismaClientOptions>;
-    remove(id: string): import("@prisma/client").Prisma.Prisma__AbsenceClient<{
+    remove(id: string): Promise<{
         id: string;
-        createdAt: Date;
-        type: string;
         status: import("@prisma/client").$Enums.AbsenceStatus;
+        createdAt: Date;
         employeeId: string;
+        type: string;
         startDate: Date;
         endDate: Date;
         reason: string | null;
         documentUrl: string | null;
         createdBy: string | null;
-    }, never, import("@prisma/client/runtime/library").DefaultArgs, import("@prisma/client").Prisma.PrismaClientOptions>;
+    }>;
     getReplacementSuggestions(absenceId: string): Promise<any[]>;
 }

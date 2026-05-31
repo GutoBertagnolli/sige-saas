@@ -19,7 +19,12 @@ let AbsencesService = class AbsencesService {
     findAll() {
         return this.prisma.absence.findMany({
             include: {
-                employee: true,
+                employee: {
+                    include: {
+                        school: true,
+                    },
+                },
+                substitutions: true,
             },
             orderBy: {
                 startDate: 'desc',
@@ -30,7 +35,11 @@ let AbsencesService = class AbsencesService {
         return this.prisma.absence.create({
             data,
             include: {
-                employee: true,
+                employee: {
+                    include: {
+                        school: true,
+                    },
+                },
             },
         });
     }
@@ -39,13 +48,24 @@ let AbsencesService = class AbsencesService {
             where: { id },
             data,
             include: {
-                employee: true,
+                employee: {
+                    include: {
+                        school: true,
+                    },
+                },
             },
         });
     }
-    remove(id) {
-        return this.prisma.absence.delete({
-            where: { id },
+    async remove(id) {
+        return this.prisma.$transaction(async (transaction) => {
+            await transaction.substitution.deleteMany({
+                where: {
+                    absenceId: id,
+                },
+            });
+            return transaction.absence.delete({
+                where: { id },
+            });
         });
     }
     async getReplacementSuggestions(absenceId) {
@@ -55,9 +75,18 @@ let AbsencesService = class AbsencesService {
                 employee: {
                     include: {
                         weeklySchedules: {
+                            where: {
+                                active: true,
+                                requiresSubstitution: true,
+                            },
                             include: {
+                                class: true,
                                 timeSlot: true,
                             },
+                            orderBy: [
+                                { weekday: 'asc' },
+                                { timeSlot: { slotOrder: 'asc' } },
+                            ],
                         },
                         school: true,
                     },
@@ -68,8 +97,25 @@ let AbsencesService = class AbsencesService {
             return [];
         }
         const employee = absence.employee;
+        if (!employee.schoolId) {
+            return [];
+        }
         const suggestions = [];
         for (const schedule of employee.weeklySchedules) {
+            const classSchedule = schedule.classId
+                ? await this.prisma.classSchedule.findFirst({
+                    where: {
+                        classId: schedule.classId,
+                        weekday: schedule.weekday,
+                        timeSlotId: schedule.timeSlotId,
+                        teacherId: employee.id,
+                        isActive: true,
+                    },
+                    include: {
+                        class: true,
+                    },
+                })
+                : null;
             const availableEmployees = await this.prisma.employee.findMany({
                 where: {
                     schoolId: employee.schoolId,
@@ -81,35 +127,41 @@ let AbsencesService = class AbsencesService {
                 include: {
                     weeklySchedules: {
                         where: {
+                            active: true,
                             weekday: schedule.weekday,
                             timeSlotId: schedule.timeSlotId,
                         },
                     },
                 },
             });
-            const ranked = availableEmployees.map((candidate) => {
+            const ranked = availableEmployees
+                .map((candidate) => {
                 const slot = candidate.weeklySchedules[0];
                 let priority = 99;
-                let reason = 'Indisponível';
-                if (!slot && candidate.roleType === 'PROFESSOR') {
-                    priority = 2;
-                    reason = 'Professor livre';
-                }
+                let reason = 'Indisponível neste horário';
                 if (slot?.type === 'HORA_ATIVIDADE') {
                     priority = 1;
                     reason = 'Hora atividade';
                 }
-                if (!slot && candidate.roleType === 'AUXILIAR') {
+                else if (!slot && candidate.roleType === 'PROFESSOR') {
+                    priority = 2;
+                    reason = 'Professor livre';
+                }
+                else if (!slot && candidate.roleType === 'AUXILIAR') {
                     priority = 3;
                     reason = 'Auxiliar disponível';
                 }
-                if (!slot && candidate.roleType === 'ORIENTADOR') {
+                else if (!slot && candidate.roleType === 'ORIENTADOR') {
                     priority = 4;
                     reason = 'Orientador fallback';
                 }
-                if (!slot && candidate.roleType === 'DIRETOR') {
+                else if (!slot && candidate.roleType === 'DIRETOR') {
                     priority = 5;
                     reason = 'Diretor fallback';
+                }
+                else if (!slot) {
+                    priority = 6;
+                    reason = 'Servidor livre';
                 }
                 return {
                     employeeId: candidate.id,
@@ -118,10 +170,15 @@ let AbsencesService = class AbsencesService {
                     priority,
                     reason,
                 };
-            });
-            ranked.sort((a, b) => a.priority - b.priority);
+            })
+                .filter((candidate) => candidate.priority < 99)
+                .sort((a, b) => a.priority - b.priority);
             suggestions.push({
+                absenceId: absence.id,
+                originalTeacherId: employee.id,
                 weekday: schedule.weekday,
+                classScheduleId: classSchedule?.id ?? null,
+                className: classSchedule?.class?.name ?? schedule.class?.name ?? null,
                 timeSlot: schedule.timeSlot,
                 replacements: ranked.slice(0, 5),
             });
