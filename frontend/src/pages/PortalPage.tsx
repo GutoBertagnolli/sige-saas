@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { api } from '../services/api';
+import { useEffect, useMemo, useState } from 'react';
+import { api, clearAuthToken, setAuthToken } from '../services/api';
 
 type PortalEmployee = {
   id: string;
@@ -18,6 +18,13 @@ type PortalUser = {
   email: string;
   employee?: PortalEmployee | null;
 };
+
+type PortalSession = {
+  token: string;
+  user: PortalUser;
+};
+
+const PORTAL_SESSION_KEY = 'sige_portal_session';
 
 type Announcement = {
   id: string;
@@ -61,10 +68,7 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 async function login(data: { email: string; password: string }) {
-  const response = await api.post<{
-    token: string;
-    user: PortalUser;
-  }>('/auth/login', {
+  const response = await api.post<PortalSession>('/auth/login', {
     ...data,
     tenantSlug: 'suportiva',
   });
@@ -101,7 +105,17 @@ function formatSchedule(substitution: Substitution) {
 export default function PortalPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [user, setUser] = useState<PortalUser | null>(null);
+  const [user, setUser] = useState<PortalUser | null>(() => {
+    const stored = localStorage.getItem(PORTAL_SESSION_KEY);
+    if (!stored) return null;
+
+    try {
+      return JSON.parse(stored).user ?? null;
+    } catch {
+      localStorage.removeItem(PORTAL_SESSION_KEY);
+      return null;
+    }
+  });
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [substitutions, setSubstitutions] = useState<Substitution[]>([]);
   const [loading, setLoading] = useState(false);
@@ -113,6 +127,12 @@ export default function PortalPage() {
     () => substitutions.filter((item) => item.status !== 'DECLINED'),
     [substitutions],
   );
+
+  useEffect(() => {
+    if (employee) {
+      loadPortalData(employee);
+    }
+  }, [employee?.id]);
 
   async function loadPortalData(currentEmployee: PortalEmployee) {
     setAnnouncementsError('');
@@ -144,6 +164,8 @@ export default function PortalPage() {
 
     try {
       const result = await login({ email, password });
+      setAuthToken(result.token);
+      localStorage.setItem(PORTAL_SESSION_KEY, JSON.stringify({ user: result.user }));
       setUser(result.user);
 
       if (result.user.employee) {
@@ -154,6 +176,16 @@ export default function PortalPage() {
     } finally {
       setLoading(false);
     }
+  }
+
+  function handleLogout() {
+    clearAuthToken();
+    localStorage.removeItem(PORTAL_SESSION_KEY);
+    setUser(null);
+    setAnnouncements([]);
+    setSubstitutions([]);
+    setEmail('');
+    setPassword('');
   }
 
   async function updateSubstitution(id: string, action: 'accept' | 'decline') {
@@ -208,7 +240,15 @@ export default function PortalPage() {
     <section className="min-h-screen bg-slate-100 p-5">
       <div className="mx-auto max-w-5xl space-y-5">
         <div className="rounded-2xl border bg-white p-5 shadow-sm">
-          <h1 className="text-xl font-semibold">Portal do servidor</h1>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <h1 className="text-xl font-semibold">Portal do servidor</h1>
+            <button
+              onClick={handleLogout}
+              className="rounded-xl border px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
+            >
+              Sair
+            </button>
+          </div>
           <p className="text-sm text-slate-500">
             {employee?.name ?? user.name} • {employee?.school?.name ?? 'Sem escola vinculada'}
           </p>
