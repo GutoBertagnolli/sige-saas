@@ -59,6 +59,7 @@ type DashboardAnnouncement = {
   id: string;
   title: string;
   message: string;
+  createdBy?: string | null;
   school?: {
     name: string;
   } | null;
@@ -185,6 +186,9 @@ function Dashboard() {
                 <div className="mt-1 line-clamp-3">{announcement.message}</div>
                 <div className="mt-2 text-xs text-slate-500">
                   {announcement.school?.name ?? 'Todas as escolas'}
+                </div>
+                <div className="mt-1 text-xs text-slate-500">
+                  Publicado por {announcement.createdBy || 'Direcao'}
                 </div>
               </div>
             ))}

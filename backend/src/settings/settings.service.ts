@@ -4,6 +4,24 @@ import { PrismaService } from '../common/prisma.service';
 const DEFAULT_ACCEPTANCE_TIMEOUT_MINUTES = 30;
 const ACCEPTANCE_TIMEOUT_KEY = 'substitutionAcceptanceTimeoutMinutes';
 const ACCEPTANCE_TIMEOUT_ID = 'setting-substitution-acceptance-timeout';
+const ACCESS_PROFILES = {
+  SECRETARIA: {
+    roleName: 'SECRETARIA',
+    description: 'Pode ler e cadastrar mensagens, cadastros operacionais, substituicoes, relatorios e dashboard.',
+  },
+  DIRETOR: {
+    roleName: 'DIRETOR',
+    description: 'Pode ler e cadastrar mensagens, cadastros operacionais, substituicoes, relatorios e dashboard.',
+  },
+  ORIENTADOR: {
+    roleName: 'ORIENTADOR',
+    description: 'Pode ler e cadastrar mensagens, cadastros operacionais, substituicoes, relatorios e dashboard.',
+  },
+  SERVIDOR: {
+    roleName: 'SERVIDOR',
+    description: 'Acesso restrito ao portal do servidor.',
+  },
+};
 
 type SettingRow = {
   value: string;
@@ -68,6 +86,77 @@ export class SettingsService {
     return this.getPublicSettings();
   }
 
+  async getAccessList() {
+    const employees = await this.prisma.employee.findMany({
+      where: {
+        active: true,
+      },
+      include: {
+        school: true,
+        user: {
+          include: {
+            role: true,
+          },
+        },
+      },
+      orderBy: {
+        name: 'asc',
+      },
+    });
+
+    return employees.map((employee) => ({
+      id: employee.id,
+      name: employee.name,
+      roleType: employee.roleType,
+      school: employee.school,
+      loginEmail: employee.loginEmail ?? employee.user?.email ?? null,
+      hasUser: Boolean(employee.userId),
+      accessProfile: this.inferAccessProfile(
+        employee.user?.role?.name,
+        employee.roleType,
+      ),
+    }));
+  }
+
+  async updateEmployeeAccess(
+    employeeId: string,
+    data: { accessProfile?: string; active?: boolean },
+  ) {
+    const accessProfile = this.normalizeAccessProfile(data.accessProfile);
+    const employee = await this.prisma.employee.findUnique({
+      where: {
+        id: employeeId,
+      },
+      include: {
+        user: true,
+      },
+    });
+
+    if (!employee) {
+      throw new BadRequestException('Servidor nao encontrado.');
+    }
+
+    if (!employee.userId || !employee.user) {
+      throw new BadRequestException(
+        'Este servidor ainda nao possui login. Gere o acesso no cadastro de servidores.',
+      );
+    }
+
+    const role = await this.findOrCreateAccessRole(employee.tenantId, accessProfile);
+
+    await this.prisma.user.update({
+      where: {
+        id: employee.userId,
+      },
+      data: {
+        roleId: role.id,
+        active: data.active ?? true,
+      },
+    });
+
+    return this.getAccessList();
+  }
+
   private async ensureSettingsTable() {
     await this.prisma.$executeRaw`
       CREATE TABLE IF NOT EXISTS "SystemSetting" (
@@ -78,5 +167,52 @@ export class SettingsService {
         "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
       )
     `;
+  }
+
+  private normalizeAccessProfile(accessProfile?: string) {
+    const value = String(accessProfile || 'SERVIDOR').toUpperCase();
+
+    if (!Object.keys(ACCESS_PROFILES).includes(value)) {
+      throw new BadRequestException('Perfil de acesso invalido.');
+    }
+
+    return value as keyof typeof ACCESS_PROFILES;
+  }
+
+  private inferAccessProfile(roleName?: string | null, roleType?: string | null) {
+    if (roleName && Object.keys(ACCESS_PROFILES).includes(roleName)) {
+      return roleName;
+    }
+
+    if (roleType === 'SECRETARIA') return 'SECRETARIA';
+    if (roleType === 'DIRETOR') return 'DIRETOR';
+    if (roleType === 'ORIENTADOR') return 'ORIENTADOR';
+
+    return 'SERVIDOR';
+  }
+
+  private async findOrCreateAccessRole(
+    tenantId: string,
+    accessProfile: keyof typeof ACCESS_PROFILES,
+  ) {
+    const profile = ACCESS_PROFILES[accessProfile];
+    const existing = await this.prisma.role.findFirst({
+      where: {
+        tenantId,
+        name: profile.roleName,
+      },
+    });
+
+    if (existing) {
+      return existing;
+    }
+
+    return this.prisma.role.create({
+      data: {
+        tenantId,
+        name: profile.roleName,
+        description: profile.description,
+      },
+    });
   }
 }

@@ -24,6 +24,7 @@ type Announcement = {
   title: string;
   message: string;
   priority: number;
+  createdBy?: string | null;
   school?: {
     name: string;
   } | null;
@@ -239,6 +240,9 @@ export default function PortalPage() {
                 </p>
                 <div className="mt-2 text-xs text-slate-500">
                   {announcement.school?.name ?? 'Todas as escolas'}
+                </div>
+                <div className="mt-1 text-xs text-slate-500">
+                  Publicado por {announcement.createdBy || 'Direcao'}
                 </div>
               </article>
             ))}

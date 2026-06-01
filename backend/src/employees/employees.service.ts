@@ -3,7 +3,14 @@ import * as bcrypt from 'bcryptjs';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../common/prisma.service';
 
-const ADMIN_ROLE_TYPES = new Set(['SECRETARIA', 'DIRETOR', 'ORIENTADOR']);
+const ROLE_BY_EMPLOYEE_TYPE: Record<string, string> = {
+  SECRETARIA: 'SECRETARIA',
+  DIRETOR: 'DIRETOR',
+  ORIENTADOR: 'ORIENTADOR',
+  PROFESSOR: 'SERVIDOR',
+  AUXILIAR: 'SERVIDOR',
+  SERVICOS_GERAIS: 'SERVIDOR',
+};
 
 @Injectable()
 export class EmployeesService {
@@ -106,9 +113,7 @@ export class EmployeesService {
   }
 
   private async findOrCreateRole(tenantId: string, roleType: string) {
-    const roleName = ADMIN_ROLE_TYPES.has(roleType)
-      ? 'ADMINISTRATIVO'
-      : 'SERVIDOR';
+    const roleName = ROLE_BY_EMPLOYEE_TYPE[roleType] ?? 'SERVIDOR';
 
     const existing = await this.prisma.role.findFirst({
       where: {
@@ -126,7 +131,7 @@ export class EmployeesService {
         tenantId,
         name: roleName,
         description:
-          roleName === 'ADMINISTRATIVO'
+          roleName !== 'SERVIDOR'
             ? 'Acesso administrativo ao SIGE'
             : 'Acesso restrito ao portal do servidor',
       },

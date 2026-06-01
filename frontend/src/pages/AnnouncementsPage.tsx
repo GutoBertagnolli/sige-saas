@@ -22,6 +22,13 @@ type Announcement = {
   school?: School | null;
 };
 
+type AccessUser = {
+  id: string;
+  name: string;
+  accessProfile: string;
+  loginEmail?: string | null;
+};
+
 async function getAnnouncements() {
   const response = await api.get<Announcement[]>('/announcements');
   return response.data;
@@ -29,6 +36,11 @@ async function getAnnouncements() {
 
 async function getSchools() {
   const response = await api.get<School[]>('/schools');
+  return response.data;
+}
+
+async function getAccessUsers() {
+  const response = await api.get<AccessUser[]>('/settings/access');
   return response.data;
 }
 
@@ -92,6 +104,7 @@ export default function AnnouncementsPage() {
   const [priority, setPriority] = useState(2);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [createdBy, setCreatedBy] = useState('Direcao');
   const [editingAnnouncement, setEditingAnnouncement] =
     useState<Announcement | null>(null);
 
@@ -105,6 +118,11 @@ export default function AnnouncementsPage() {
     queryFn: getSchools,
   });
 
+  const { data: accessUsers = [] } = useQuery({
+    queryKey: ['settings-access'],
+    queryFn: getAccessUsers,
+  });
+
   function resetForm() {
     setTitle('');
     setMessage('');
@@ -114,6 +132,7 @@ export default function AnnouncementsPage() {
     setPriority(2);
     setStartDate('');
     setEndDate('');
+    setCreatedBy('Direcao');
     setEditingAnnouncement(null);
   }
 
@@ -159,7 +178,7 @@ export default function AnnouncementsPage() {
       priority,
       startDate: startDate ? `${startDate}T00:00:00.000Z` : null,
       endDate: endDate ? `${endDate}T23:59:59.000Z` : null,
-      createdBy: 'Direcao',
+      createdBy,
     };
   }
 
@@ -185,6 +204,7 @@ export default function AnnouncementsPage() {
     setPriority(announcement.priority || 2);
     setStartDate(toInputDate(announcement.startDate));
     setEndDate(toInputDate(announcement.endDate));
+    setCreatedBy(announcement.createdBy || 'Direcao');
   }
 
   function handleDelete(announcement: Announcement) {
@@ -232,6 +252,28 @@ export default function AnnouncementsPage() {
                 className="mt-1 w-full border rounded-xl px-3 py-2 text-sm"
                 placeholder="Escreva o comunicado..."
               />
+            </div>
+
+            <div>
+              <label className="text-sm font-medium">Publicado por</label>
+              <select
+                value={createdBy}
+                onChange={(event) => setCreatedBy(event.target.value)}
+                className="mt-1 w-full border rounded-xl px-3 py-2 text-sm"
+              >
+                <option value="Direcao">Direcao</option>
+                {accessUsers
+                  .filter((user) =>
+                    ['SECRETARIA', 'DIRETOR', 'ORIENTADOR'].includes(
+                      user.accessProfile,
+                    ),
+                  )
+                  .map((user) => (
+                    <option key={user.id} value={user.name}>
+                      {user.name}
+                    </option>
+                  ))}
+              </select>
             </div>
 
             <div>
@@ -367,6 +409,9 @@ export default function AnnouncementsPage() {
                       <p className="mt-1 whitespace-pre-wrap text-sm text-slate-700">
                         {announcement.message}
                       </p>
+                      <div className="mt-2 text-xs text-slate-500">
+                        Publicado por {announcement.createdBy || 'Direcao'}
+                      </div>
                     </div>
                     <div className="flex gap-2">
                       <button
