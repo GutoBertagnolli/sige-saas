@@ -35,10 +35,6 @@ export class SettingsService {
   constructor(private prisma: PrismaService) {}
 
   async getSubstitutionAcceptanceTimeoutMinutes() {
-    if (municipalityName.length < 2 || municipalityName.length > 120) {
-      throw new BadRequestException('Informe o nome da prefeitura.');
-    }
-
     await this.ensureSettingsTable();
 
     const rows = await this.prisma.$queryRaw<SettingRow[]>`
@@ -71,6 +67,10 @@ export class SettingsService {
   }) {
     const timeout = Number(data.substitutionAcceptanceTimeoutMinutes);
     const municipalityName = String(data.municipalityName || DEFAULT_MUNICIPALITY_NAME).trim();
+
+    if (municipalityName.length < 2 || municipalityName.length > 120) {
+      throw new BadRequestException('Informe o nome da prefeitura.');
+    }
 
     if (!Number.isInteger(timeout) || timeout < 1 || timeout > 1440) {
       throw new BadRequestException(
