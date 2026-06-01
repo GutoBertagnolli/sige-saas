@@ -354,6 +354,81 @@ export class AnnouncementsService {
     return this.findById(id);
   }
 
+  async update(id: string, data: any) {
+    if (!data.title?.trim()) {
+      throw new BadRequestException('Titulo e obrigatorio.');
+    }
+
+    if (!data.message?.trim()) {
+      throw new BadRequestException('Mensagem e obrigatoria.');
+    }
+
+    const existing = await this.findById(id);
+
+    if (!existing) {
+      throw new NotFoundException('Aviso nao encontrado.');
+    }
+
+    const { hasPriority, hasTargetRoleType } =
+      await this.getAnnouncementCapabilities();
+    const priority = Number(data.priority || 2);
+    const startDate = data.startDate ? new Date(data.startDate) : null;
+    const endDate = data.endDate ? new Date(data.endDate) : null;
+    const targetRoleType =
+      hasTargetRoleType && data.targetRoleType
+        ? data.targetRoleType === 'COORDENADOR'
+          ? 'ORIENTADOR'
+          : String(data.targetRoleType)
+        : null;
+
+    if (hasPriority && hasTargetRoleType && targetRoleType) {
+      await this.prisma.$executeRaw`
+        UPDATE "Announcement"
+        SET
+          "schoolId" = ${data.schoolId || null},
+          title = ${data.title},
+          message = ${data.message},
+          "imageUrl" = ${data.imageUrl || null},
+          "visibilityType" = ${data.visibilityType || 'ALL'},
+          priority = ${Number.isFinite(priority) ? priority : 2},
+          "targetRoleType" = ${targetRoleType}::"EmployeeRoleType",
+          "startDate" = ${startDate},
+          "endDate" = ${endDate}
+        WHERE id = ${id}
+      `;
+    } else if (hasPriority && hasTargetRoleType) {
+      await this.prisma.$executeRaw`
+        UPDATE "Announcement"
+        SET
+          "schoolId" = ${data.schoolId || null},
+          title = ${data.title},
+          message = ${data.message},
+          "imageUrl" = ${data.imageUrl || null},
+          "visibilityType" = ${data.visibilityType || 'ALL'},
+          priority = ${Number.isFinite(priority) ? priority : 2},
+          "targetRoleType" = NULL,
+          "startDate" = ${startDate},
+          "endDate" = ${endDate}
+        WHERE id = ${id}
+      `;
+    } else {
+      await this.prisma.$executeRaw`
+        UPDATE "Announcement"
+        SET
+          "schoolId" = ${data.schoolId || null},
+          title = ${data.title},
+          message = ${data.message},
+          "imageUrl" = ${data.imageUrl || null},
+          "visibilityType" = ${data.visibilityType || 'ALL'},
+          "startDate" = ${startDate},
+          "endDate" = ${endDate}
+        WHERE id = ${id}
+      `;
+    }
+
+    return this.findById(id);
+  }
+
   async remove(id: string) {
     const deleted = await this.prisma.$executeRaw`
       DELETE FROM "Announcement"

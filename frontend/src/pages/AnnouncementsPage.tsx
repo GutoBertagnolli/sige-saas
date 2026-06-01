@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Megaphone, Trash2 } from 'lucide-react';
+import { Megaphone, Pencil, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { api } from '../services/api';
 
@@ -37,6 +37,11 @@ async function createAnnouncement(data: any) {
   return response.data;
 }
 
+async function updateAnnouncement(data: any) {
+  const response = await api.put<Announcement>(`/announcements/${data.id}`, data);
+  return response.data;
+}
+
 async function deleteAnnouncement(id: string) {
   const response = await api.delete(`/announcements/${id}`);
   return response.data;
@@ -50,15 +55,30 @@ function formatDate(value?: string | null) {
   return new Date(value).toLocaleDateString();
 }
 
+function toInputDate(value?: string | null) {
+  if (!value) {
+    return '';
+  }
+
+  return new Date(value).toISOString().slice(0, 10);
+}
+
 function translateVisibility(value: string) {
   const labels: Record<string, string> = {
     ALL: 'Todos',
-    SCHOOL: 'Escola específica',
-    DIRECTION: 'Direção',
+    SCHOOL: 'Escola especifica',
+    DIRECTION: 'Direcao',
     TEACHERS: 'Professores',
   };
 
   return labels[value] ?? value;
+}
+
+function getErrorMessage(error: any, fallback: string) {
+  const message =
+    error?.response?.data?.message ?? error?.response?.data?.error ?? fallback;
+
+  return Array.isArray(message) ? message.join('\n') : message;
 }
 
 export default function AnnouncementsPage() {
@@ -72,6 +92,8 @@ export default function AnnouncementsPage() {
   const [priority, setPriority] = useState(2);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [editingAnnouncement, setEditingAnnouncement] =
+    useState<Announcement | null>(null);
 
   const { data: announcements = [], isLoading } = useQuery({
     queryKey: ['announcements'],
@@ -83,26 +105,37 @@ export default function AnnouncementsPage() {
     queryFn: getSchools,
   });
 
+  function resetForm() {
+    setTitle('');
+    setMessage('');
+    setSchoolId('');
+    setVisibilityType('ALL');
+    setTargetRoleType('');
+    setPriority(2);
+    setStartDate('');
+    setEndDate('');
+    setEditingAnnouncement(null);
+  }
+
   const createMutation = useMutation({
     mutationFn: createAnnouncement,
     onSuccess: async () => {
-      setTitle('');
-      setMessage('');
-      setSchoolId('');
-      setVisibilityType('ALL');
-      setTargetRoleType('');
-      setPriority(2);
-      setStartDate('');
-      setEndDate('');
+      resetForm();
       await queryClient.invalidateQueries({ queryKey: ['announcements'] });
     },
     onError: (error: any) => {
-      const message =
-        error?.response?.data?.message ??
-        error?.response?.data?.error ??
-        'Erro ao publicar aviso.';
+      alert(getErrorMessage(error, 'Erro ao publicar aviso.'));
+    },
+  });
 
-      alert(Array.isArray(message) ? message.join('\n') : message);
+  const updateMutation = useMutation({
+    mutationFn: updateAnnouncement,
+    onSuccess: async () => {
+      resetForm();
+      await queryClient.invalidateQueries({ queryKey: ['announcements'] });
+    },
+    onError: (error: any) => {
+      alert(getErrorMessage(error, 'Erro ao atualizar aviso.'));
     },
   });
 
@@ -116,8 +149,8 @@ export default function AnnouncementsPage() {
     },
   });
 
-  function handleSubmit() {
-    createMutation.mutate({
+  function getPayload() {
+    return {
       title,
       message,
       schoolId: schoolId || null,
@@ -126,8 +159,32 @@ export default function AnnouncementsPage() {
       priority,
       startDate: startDate ? `${startDate}T00:00:00.000Z` : null,
       endDate: endDate ? `${endDate}T23:59:59.000Z` : null,
-      createdBy: 'Direção',
-    });
+      createdBy: 'Direcao',
+    };
+  }
+
+  function handleSubmit() {
+    if (editingAnnouncement) {
+      updateMutation.mutate({
+        id: editingAnnouncement.id,
+        ...getPayload(),
+      });
+      return;
+    }
+
+    createMutation.mutate(getPayload());
+  }
+
+  function handleEdit(announcement: Announcement) {
+    setEditingAnnouncement(announcement);
+    setTitle(announcement.title);
+    setMessage(announcement.message);
+    setSchoolId(announcement.school?.id || '');
+    setVisibilityType(announcement.visibilityType || 'ALL');
+    setTargetRoleType(announcement.targetRoleType || '');
+    setPriority(announcement.priority || 2);
+    setStartDate(toInputDate(announcement.startDate));
+    setEndDate(toInputDate(announcement.endDate));
   }
 
   function handleDelete(announcement: Announcement) {
@@ -138,25 +195,31 @@ export default function AnnouncementsPage() {
     deleteMutation.mutate(announcement.id);
   }
 
+  const saving = createMutation.isPending || updateMutation.isPending;
+
   return (
     <section className="p-5">
       <div className="grid gap-5 lg:grid-cols-[420px_1fr]">
         <div className="bg-white border rounded-2xl shadow-sm p-6">
           <div className="mb-5">
-            <h2 className="text-lg font-semibold">Novo aviso</h2>
+            <h2 className="text-lg font-semibold">
+              {editingAnnouncement ? 'Editar aviso' : 'Novo aviso'}
+            </h2>
             <p className="text-sm text-slate-500">
-              Publique comunicados para o quadro de mensagens.
+              {editingAnnouncement
+                ? 'Atualize o comunicado selecionado.'
+                : 'Publique comunicados para o quadro de mensagens.'}
             </p>
           </div>
 
           <div className="space-y-4">
             <div>
-              <label className="text-sm font-medium">Título</label>
+              <label className="text-sm font-medium">Titulo</label>
               <input
                 value={title}
                 onChange={(event) => setTitle(event.target.value)}
                 className="mt-1 w-full border rounded-xl px-3 py-2 text-sm"
-                placeholder="Ex.: Reunião pedagógica"
+                placeholder="Ex.: Reuniao pedagogica"
               />
             </div>
 
@@ -195,14 +258,14 @@ export default function AnnouncementsPage() {
                 className="mt-1 w-full border rounded-xl px-3 py-2 text-sm"
               >
                 <option value="ALL">Todos</option>
-                <option value="SCHOOL">Escola específica</option>
-                <option value="DIRECTION">Direção</option>
+                <option value="SCHOOL">Escola especifica</option>
+                <option value="DIRECTION">Direcao</option>
                 <option value="TEACHERS">Professores</option>
               </select>
             </div>
 
             <div>
-              <label className="text-sm font-medium">Grupo de função</label>
+              <label className="text-sm font-medium">Grupo de funcao</label>
               <select
                 value={targetRoleType}
                 onChange={(event) => setTargetRoleType(event.target.value)}
@@ -211,10 +274,10 @@ export default function AnnouncementsPage() {
                 <option value="">Todos os cargos</option>
                 <option value="PROFESSOR">Professores</option>
                 <option value="AUXILIAR">Auxiliares</option>
-                <option value="SERVICOS_GERAIS">Serviços gerais</option>
+                <option value="SERVICOS_GERAIS">Servicos gerais</option>
                 <option value="SECRETARIA">Secretaria</option>
-                <option value="DIRETOR">Direção</option>
-                <option value="ORIENTADOR">Orientação</option>
+                <option value="DIRETOR">Direcao</option>
+                <option value="ORIENTADOR">Orientacao</option>
               </select>
             </div>
 
@@ -226,14 +289,14 @@ export default function AnnouncementsPage() {
                 className="mt-1 w-full border rounded-xl px-3 py-2 text-sm"
               >
                 <option value={1}>Alta</option>
-                <option value={2}>Média</option>
+                <option value={2}>Media</option>
                 <option value={3}>Baixa</option>
               </select>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-sm font-medium">Início</label>
+                <label className="text-sm font-medium">Inicio</label>
                 <input
                   type="date"
                   value={startDate}
@@ -254,11 +317,25 @@ export default function AnnouncementsPage() {
 
             <button
               onClick={handleSubmit}
-              disabled={createMutation.isPending}
+              disabled={saving}
               className="w-full rounded-xl bg-slate-900 px-4 py-2 text-sm text-white disabled:opacity-60"
             >
-              {createMutation.isPending ? 'Publicando...' : 'Publicar aviso'}
+              {saving
+                ? 'Salvando...'
+                : editingAnnouncement
+                  ? 'Salvar alteracoes'
+                  : 'Publicar aviso'}
             </button>
+
+            {editingAnnouncement && (
+              <button
+                onClick={resetForm}
+                disabled={saving}
+                className="w-full rounded-xl border px-4 py-2 text-sm hover:bg-slate-50 disabled:opacity-60"
+              >
+                Cancelar edicao
+              </button>
+            )}
           </div>
         </div>
 
@@ -291,14 +368,23 @@ export default function AnnouncementsPage() {
                         {announcement.message}
                       </p>
                     </div>
-                    <button
-                      onClick={() => handleDelete(announcement)}
-                      disabled={deleteMutation.isPending}
-                      className="rounded-lg border border-red-200 bg-white p-2 text-red-700 hover:bg-red-50 disabled:opacity-60"
-                      title="Apagar aviso"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleEdit(announcement)}
+                        className="rounded-lg border bg-white p-2 text-slate-700 hover:bg-slate-100"
+                        title="Editar aviso"
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(announcement)}
+                        disabled={deleteMutation.isPending}
+                        className="rounded-lg border border-red-200 bg-white p-2 text-red-700 hover:bg-red-50 disabled:opacity-60"
+                        title="Apagar aviso"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
                   </div>
 
                   <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-500">
@@ -306,7 +392,7 @@ export default function AnnouncementsPage() {
                       {translateVisibility(announcement.visibilityType)}
                     </span>
                     <span className="rounded-full bg-white px-2 py-1">
-                      Prioridade {announcement.priority === 1 ? 'alta' : announcement.priority === 2 ? 'média' : 'baixa'}
+                      Prioridade {announcement.priority === 1 ? 'alta' : announcement.priority === 2 ? 'media' : 'baixa'}
                     </span>
                     <span className="rounded-full bg-white px-2 py-1">
                       {announcement.targetRoleType?.replace(/_/g, ' ') ?? 'Todos os cargos'}
@@ -315,7 +401,7 @@ export default function AnnouncementsPage() {
                       {announcement.school?.name ?? 'Todas as escolas'}
                     </span>
                     <span className="rounded-full bg-white px-2 py-1">
-                      {formatDate(announcement.startDate)} até {formatDate(announcement.endDate)}
+                      {formatDate(announcement.startDate)} ate {formatDate(announcement.endDate)}
                     </span>
                   </div>
                 </article>
