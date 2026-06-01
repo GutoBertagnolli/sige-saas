@@ -38,6 +38,7 @@ import {
   useNavigate,
 } from 'react-router-dom';
 import './index.css';
+import sigeLogoWhite from './assets/sige-logo-white.png';
 import { APP_VERSION } from './version';
 import { api, clearAuthToken, setAuthToken } from './services/api';
 
@@ -239,7 +240,11 @@ function Layout({
     <div className="min-h-screen flex bg-slate-50">
       <aside className="hidden md:flex w-72 bg-slate-900 text-white flex-col p-5">
         <div className="mb-8">
-          <div className="text-xl font-bold">SIGE</div>
+          <img
+            src={sigeLogoWhite}
+            alt="SIGE"
+            className="h-7 w-auto object-contain"
+          />
           <div className="text-xs text-slate-300">
             Sistema Integrado de Gestao Educacional
           </div>
