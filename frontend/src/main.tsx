@@ -17,11 +17,15 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import {
   CalendarDays,
+  Camera,
+  ChevronDown,
   Clock,
   GraduationCap,
+  KeyRound,
   LogOut,
   Megaphone,
   School,
+  UserCircle,
   Users,
 } from 'lucide-react';
 import {
@@ -79,6 +83,7 @@ type AuthUser = {
   id: string;
   name: string;
   email: string;
+  photoUrl?: string | null;
   role?: string | null;
   employee?: AuthEmployee | null;
 };
@@ -110,6 +115,15 @@ async function getCurrentSession() {
   return response.data;
 }
 
+async function updateProfile(data: { photoUrl: string | null }) {
+  const response = await api.put<Omit<AuthSession, 'token'>>('/auth/profile', data);
+  return response.data;
+}
+
+async function updatePassword(data: { currentPassword: string; newPassword: string }) {
+  await api.put('/auth/password', data);
+}
+
 function normalizeRole(user: AuthUser) {
   return String(user.role || user.employee?.roleType || '').toUpperCase();
 }
@@ -118,7 +132,15 @@ function canAccessAdmin(user: AuthUser) {
   return ADMIN_ROLES.includes(normalizeRole(user));
 }
 
-function Layout({ user, onLogout }: { user: AuthUser; onLogout: () => void }) {
+function Layout({
+  user,
+  onLogout,
+  onUserUpdate,
+}: {
+  user: AuthUser;
+  onLogout: () => void;
+  onUserUpdate: (user: AuthUser) => void;
+}) {
   const location = useLocation();
   const current = menu.find((item) => item.path === location.pathname);
 
@@ -161,7 +183,7 @@ function Layout({ user, onLogout }: { user: AuthUser; onLogout: () => void }) {
               Fundação inicial do SIGE by SUPORTIVA
             </p>
           </div>
-          <div className="text-right text-xs text-slate-500">
+          <div className="text-right text-xs text-slate-500 hidden">
             <div>sige.suportiva.org</div>
             <div className="mt-1">{user.name}</div>
             <button
@@ -173,6 +195,7 @@ function Layout({ user, onLogout }: { user: AuthUser; onLogout: () => void }) {
             </button>
             <div>Versão {APP_VERSION}</div>
           </div>
+          <UserMenu user={user} onLogout={onLogout} onUserUpdate={onUserUpdate} />
         </header>
 
         <Routes>
@@ -190,6 +213,291 @@ function Layout({ user, onLogout }: { user: AuthUser; onLogout: () => void }) {
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
       </main>
+    </div>
+  );
+}
+
+function userInitials(name: string) {
+  return name
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join('') || 'U';
+}
+
+function UserMenu({
+  user,
+  onLogout,
+  onUserUpdate,
+}: {
+  user: AuthUser;
+  onLogout: () => void;
+  onUserUpdate: (user: AuthUser) => void;
+}) {
+  const [profileOpen, setProfileOpen] = React.useState(false);
+  const [passwordOpen, setPasswordOpen] = React.useState(false);
+
+  return (
+    <div className="flex items-center gap-3">
+      <div className="hidden sm:block text-right text-xs text-slate-500">
+        <div>sige.suportiva.org</div>
+        <div>Versao {APP_VERSION}</div>
+      </div>
+
+      <div className="relative group">
+        <button className="flex items-center gap-2 rounded-xl border bg-white px-2 py-1.5 text-left shadow-sm hover:bg-slate-50">
+          <Avatar user={user} />
+          <div className="hidden md:block min-w-0">
+            <div className="max-w-40 truncate text-sm font-medium text-slate-900">{user.name}</div>
+            <div className="max-w-40 truncate text-xs text-slate-500">{user.email}</div>
+          </div>
+          <ChevronDown className="h-4 w-4 text-slate-500" />
+        </button>
+
+        <div className="invisible absolute right-0 z-50 w-64 pt-2 opacity-0 transition group-hover:visible group-hover:opacity-100">
+          <div className="rounded-xl border bg-white p-2 text-sm shadow-lg">
+            <div className="border-b px-3 py-2">
+              <div className="font-medium text-slate-900">{user.name}</div>
+              <div className="truncate text-xs text-slate-500">{user.email}</div>
+            </div>
+
+            <button
+              onClick={() => setProfileOpen(true)}
+              className="mt-2 flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-slate-700 hover:bg-slate-50"
+            >
+              <Camera className="h-4 w-4" />
+              Alterar foto
+            </button>
+            <button
+              onClick={() => setPasswordOpen(true)}
+              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-slate-700 hover:bg-slate-50"
+            >
+              <KeyRound className="h-4 w-4" />
+              Alterar senha
+            </button>
+            <button
+              onClick={onLogout}
+              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-red-600 hover:bg-red-50"
+            >
+              <LogOut className="h-4 w-4" />
+              Sair
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {profileOpen && (
+        <ProfilePhotoModal
+          user={user}
+          onClose={() => setProfileOpen(false)}
+          onUserUpdate={onUserUpdate}
+        />
+      )}
+      {passwordOpen && <PasswordModal onClose={() => setPasswordOpen(false)} />}
+    </div>
+  );
+}
+
+function Avatar({ user }: { user: AuthUser }) {
+  if (user.photoUrl) {
+    return (
+      <img
+        src={user.photoUrl}
+        alt={user.name}
+        className="h-10 w-10 rounded-full border object-cover"
+      />
+    );
+  }
+
+  return (
+    <div className="flex h-10 w-10 items-center justify-center rounded-full border bg-slate-100 text-sm font-semibold text-slate-700">
+      {userInitials(user.name)}
+    </div>
+  );
+}
+
+function ProfilePhotoModal({
+  user,
+  onClose,
+  onUserUpdate,
+}: {
+  user: AuthUser;
+  onClose: () => void;
+  onUserUpdate: (user: AuthUser) => void;
+}) {
+  const [photoUrl, setPhotoUrl] = React.useState(user.photoUrl ?? '');
+  const [saving, setSaving] = React.useState(false);
+  const [error, setError] = React.useState('');
+
+  function handleFile(file?: File) {
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => setPhotoUrl(String(reader.result || ''));
+    reader.readAsDataURL(file);
+  }
+
+  async function save() {
+    setSaving(true);
+    setError('');
+
+    try {
+      const session = await updateProfile({ photoUrl: photoUrl || null });
+      onUserUpdate(session.user);
+      onClose();
+    } catch (error: any) {
+      setError(error?.response?.data?.message ?? 'Erro ao atualizar foto.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal title="Alterar foto" onClose={onClose}>
+      <div className="space-y-4">
+        <div className="flex items-center gap-4">
+          {photoUrl ? (
+            <img src={photoUrl} alt={user.name} className="h-20 w-20 rounded-full border object-cover" />
+          ) : (
+            <div className="flex h-20 w-20 items-center justify-center rounded-full border bg-slate-100">
+              <UserCircle className="h-10 w-10 text-slate-400" />
+            </div>
+          )}
+          <input
+            type="file"
+            accept="image/*"
+            onChange={(event) => handleFile(event.target.files?.[0])}
+            className="w-full rounded-xl border px-3 py-2 text-sm"
+          />
+        </div>
+
+        {error && <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
+
+        <div className="flex justify-end gap-2">
+          <button onClick={() => setPhotoUrl('')} className="rounded-xl border px-4 py-2 text-sm text-slate-700">
+            Remover foto
+          </button>
+          <button onClick={onClose} className="rounded-xl border px-4 py-2 text-sm text-slate-700">
+            Cancelar
+          </button>
+          <button
+            onClick={save}
+            disabled={saving}
+            className="rounded-xl bg-slate-900 px-4 py-2 text-sm text-white disabled:opacity-60"
+          >
+            {saving ? 'Salvando...' : 'Salvar'}
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function PasswordModal({ onClose }: { onClose: () => void }) {
+  const [currentPassword, setCurrentPassword] = React.useState('');
+  const [newPassword, setNewPassword] = React.useState('');
+  const [confirmPassword, setConfirmPassword] = React.useState('');
+  const [saving, setSaving] = React.useState(false);
+  const [error, setError] = React.useState('');
+
+  async function save(event: React.FormEvent) {
+    event.preventDefault();
+    setError('');
+
+    if (newPassword !== confirmPassword) {
+      setError('A confirmacao da senha nao confere.');
+      return;
+    }
+
+    setSaving(true);
+
+    try {
+      await updatePassword({ currentPassword, newPassword });
+      onClose();
+      alert('Senha alterada com sucesso.');
+    } catch (error: any) {
+      setError(error?.response?.data?.message ?? 'Erro ao alterar senha.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal title="Alterar senha" onClose={onClose}>
+      <form onSubmit={save} className="space-y-4">
+        <div>
+          <label className="text-sm font-medium">Senha atual</label>
+          <input
+            type="password"
+            value={currentPassword}
+            onChange={(event) => setCurrentPassword(event.target.value)}
+            className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
+            required
+          />
+        </div>
+        <div>
+          <label className="text-sm font-medium">Nova senha</label>
+          <input
+            type="password"
+            value={newPassword}
+            onChange={(event) => setNewPassword(event.target.value)}
+            className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
+            minLength={6}
+            required
+          />
+        </div>
+        <div>
+          <label className="text-sm font-medium">Confirmar nova senha</label>
+          <input
+            type="password"
+            value={confirmPassword}
+            onChange={(event) => setConfirmPassword(event.target.value)}
+            className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
+            minLength={6}
+            required
+          />
+        </div>
+
+        {error && <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
+
+        <div className="flex justify-end gap-2">
+          <button type="button" onClick={onClose} className="rounded-xl border px-4 py-2 text-sm text-slate-700">
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            disabled={saving}
+            className="rounded-xl bg-slate-900 px-4 py-2 text-sm text-white disabled:opacity-60"
+          >
+            {saving ? 'Salvando...' : 'Salvar senha'}
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+function Modal({
+  title,
+  children,
+  onClose,
+}: {
+  title: string;
+  children: React.ReactNode;
+  onClose: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="w-full max-w-lg rounded-2xl border bg-white p-6 shadow-xl">
+        <div className="mb-5 flex items-center justify-between gap-3">
+          <h2 className="text-lg font-semibold">{title}</h2>
+          <button onClick={onClose} className="rounded-lg border px-3 py-1 text-sm text-slate-600">
+            Fechar
+          </button>
+        </div>
+        {children}
+      </div>
     </div>
   );
 }
@@ -233,6 +541,11 @@ function App() {
     setUser(session.user);
   }
 
+  function handleUserUpdate(updatedUser: AuthUser) {
+    localStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify({ user: updatedUser }));
+    setUser(updatedUser);
+  }
+
   function handleLogout() {
     clearAuthToken();
     localStorage.removeItem(ADMIN_SESSION_KEY);
@@ -261,7 +574,7 @@ function App() {
         path="/*"
         element={
           user ? (
-            <Layout user={user} onLogout={handleLogout} />
+            <Layout user={user} onLogout={handleLogout} onUserUpdate={handleUserUpdate} />
           ) : (
             <Navigate to="/login" replace />
           )
@@ -314,6 +627,7 @@ function LoginPage({ onLogin }: { onLogin: (session: AuthSession) => void }) {
           <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
             {error}
           </div>
+          <UserMenu user={user} onLogout={onLogout} onUserUpdate={onUserUpdate} />
         )}
 
         <div className="mt-6 space-y-4">

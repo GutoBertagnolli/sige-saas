@@ -96,6 +96,7 @@ model User {
   name         String
   email        String
   phone        String?
+  photoUrl     String?
   passwordHash String
   roleId       String?
   role         Role?     @relation(fields: [roleId], references: [id])
