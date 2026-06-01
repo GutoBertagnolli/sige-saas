@@ -35,6 +35,7 @@ import {
   Route,
   Routes,
   useLocation,
+  useNavigate,
 } from 'react-router-dom';
 import './index.css';
 import { APP_VERSION } from './version';
@@ -60,13 +61,67 @@ const cards = [
   { title: 'Servidores cadastrados', value: '0', icon: Users },
 ];
 
+const DASHBOARD_POPUP_KEY = 'sige_show_dashboard_popups';
+
+const WEEKDAY_LABELS: Record<string, string> = {
+  MONDAY: 'Segunda-feira',
+  TUESDAY: 'Terca-feira',
+  WEDNESDAY: 'Quarta-feira',
+  THURSDAY: 'Quinta-feira',
+  FRIDAY: 'Sexta-feira',
+  SATURDAY: 'Sabado',
+  SUNDAY: 'Domingo',
+};
+
 type DashboardAnnouncement = {
   id: string;
   title: string;
   message: string;
+  priority?: number;
   createdBy?: string | null;
   school?: {
     name: string;
+  } | null;
+};
+
+type DashboardSchool = {
+  id: string;
+  active?: boolean;
+};
+
+type DashboardEmployee = {
+  id: string;
+  active?: boolean;
+  name: string;
+};
+
+type DashboardAbsence = {
+  id: string;
+  startDate: string;
+  endDate: string;
+  status?: string;
+  employee?: {
+    name: string;
+  } | null;
+};
+
+type DashboardSubstitution = {
+  id: string;
+  weekday?: string | null;
+  status: string;
+  absence?: {
+    startDate: string;
+    endDate: string;
+    employee?: {
+      name: string;
+    } | null;
+  } | null;
+  substituteTeacher?: {
+    name: string;
+  } | null;
+  timeSlot?: {
+    startTime: string;
+    endTime: string;
   } | null;
 };
 
@@ -103,6 +158,26 @@ const ADMIN_ROLES = ['SECRETARIA', 'DIRETOR', 'ORIENTADOR', 'ADMIN', 'ADMINISTRA
 
 async function getActiveAnnouncements() {
   const response = await api.get<DashboardAnnouncement[]>('/announcements/active');
+  return response.data;
+}
+
+async function getDashboardSchools() {
+  const response = await api.get<DashboardSchool[]>('/schools');
+  return response.data;
+}
+
+async function getDashboardEmployees() {
+  const response = await api.get<DashboardEmployee[]>('/employees');
+  return response.data;
+}
+
+async function getDashboardAbsences() {
+  const response = await api.get<DashboardAbsence[]>('/absences');
+  return response.data;
+}
+
+async function getDashboardSubstitutions() {
+  const response = await api.get<DashboardSubstitution[]>('/substitutions');
   return response.data;
 }
 
@@ -222,7 +297,7 @@ function Layout({
         <div className="flex-1">
         <Routes>
           <Route path="/servidores/:employeeId/planner" element={<EmployeePlannerPage />} />
-          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/dashboard" element={<DashboardHome />} />
           <Route path="/mensagens" element={<AnnouncementsPage />} />
   	  <Route path="/escolas" element={<SchoolsPage />} />          
           <Route path="/turmas" element={<ClassesPage />} />
@@ -565,6 +640,7 @@ function App() {
   function handleLogin(session: AuthSession) {
     setAuthToken(session.token);
     localStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify({ user: session.user }));
+    sessionStorage.setItem(DASHBOARD_POPUP_KEY, '1');
     setUser(session.user);
   }
 
@@ -693,6 +769,257 @@ function LoginPage({ onLogin }: { onLogin: (session: AuthSession) => void }) {
         </div>
       </form>
     </section>
+  );
+}
+
+function startOfToday() {
+  const date = new Date();
+  date.setHours(0, 0, 0, 0);
+  return date;
+}
+
+function endOfToday() {
+  const date = new Date();
+  date.setHours(23, 59, 59, 999);
+  return date;
+}
+
+function isTodayBetween(startDate?: string, endDate?: string) {
+  if (!startDate || !endDate) return false;
+
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+
+  start.setHours(0, 0, 0, 0);
+  end.setHours(23, 59, 59, 999);
+
+  return start <= endOfToday() && end >= startOfToday();
+}
+
+function formatDashboardSchedule(substitution: DashboardSubstitution) {
+  const weekday = WEEKDAY_LABELS[String(substitution.weekday || '').toUpperCase()] || 'Hoje';
+  const start = substitution.timeSlot?.startTime;
+  const end = substitution.timeSlot?.endTime;
+
+  if (!start || !end) return `${weekday} - horario nao informado`;
+  return `${weekday} - ${start} - ${end}`;
+}
+
+function formatDashboardStatus(status: string) {
+  const labels: Record<string, string> = {
+    PENDING_DIRECTOR: 'Pendente direcao',
+    SENT_TO_TEACHER: 'Aguardando substituto',
+    ACCEPTED: 'Aceito',
+    DECLINED: 'Recusado',
+    CANCELLED: 'Cancelado',
+  };
+
+  return labels[status] || status;
+}
+
+function DashboardHome() {
+  const navigate = useNavigate();
+  const [popupStep, setPopupStep] = React.useState<'none' | 'messages' | 'substitutions'>(() =>
+    sessionStorage.getItem(DASHBOARD_POPUP_KEY) === '1' ? 'messages' : 'none',
+  );
+  const { data: announcements = [] } = useQuery({
+    queryKey: ['announcements', 'active'],
+    queryFn: getActiveAnnouncements,
+  });
+  const { data: schools = [] } = useQuery({
+    queryKey: ['dashboard', 'schools'],
+    queryFn: getDashboardSchools,
+  });
+  const { data: employees = [] } = useQuery({
+    queryKey: ['dashboard', 'employees'],
+    queryFn: getDashboardEmployees,
+  });
+  const { data: absences = [] } = useQuery({
+    queryKey: ['dashboard', 'absences'],
+    queryFn: getDashboardAbsences,
+  });
+  const { data: substitutions = [] } = useQuery({
+    queryKey: ['dashboard', 'substitutions'],
+    queryFn: getDashboardSubstitutions,
+  });
+
+  const todayAbsences = absences.filter(
+    (absence) => absence.status !== 'CANCELLED' && isTodayBetween(absence.startDate, absence.endDate),
+  );
+  const todaySubstitutions = substitutions.filter(
+    (substitution) =>
+      substitution.status !== 'CANCELLED' &&
+      substitution.status !== 'DECLINED' &&
+      isTodayBetween(substitution.absence?.startDate, substitution.absence?.endDate),
+  );
+  const pendingSubstitutions = substitutions.filter((substitution) =>
+    ['PENDING_DIRECTOR', 'SENT_TO_TEACHER'].includes(substitution.status),
+  );
+  const activeSchools = schools.filter((school) => school.active !== false).length;
+  const activeEmployees = employees.filter((employee) => employee.active !== false).length;
+  const sortedAnnouncements = [...announcements].sort((first, second) => (second.priority || 0) - (first.priority || 0));
+
+  const dashboardCards = [
+    {
+      title: 'Substituicoes pendentes',
+      value: pendingSubstitutions.length,
+      icon: Clock,
+      path: '/substituicoes',
+    },
+    {
+      title: 'Afastamentos hoje',
+      value: todayAbsences.length,
+      icon: CalendarDays,
+      path: '/afastamentos',
+    },
+    {
+      title: 'Escolas ativas',
+      value: activeSchools,
+      icon: School,
+      path: '/escolas',
+    },
+    {
+      title: 'Servidores cadastrados',
+      value: activeEmployees,
+      icon: Users,
+      path: '/servidores',
+    },
+  ];
+
+  function closeMessagesPopup() {
+    setPopupStep('substitutions');
+  }
+
+  function closeSubstitutionsPopup() {
+    sessionStorage.removeItem(DASHBOARD_POPUP_KEY);
+    setPopupStep('none');
+  }
+
+  return (
+    <>
+      <section className="p-5 grid gap-4 md:grid-cols-4">
+        {dashboardCards.map((Card) => (
+          <button
+            key={Card.title}
+            type="button"
+            onClick={() => navigate(Card.path)}
+            className="bg-white rounded-2xl shadow-sm border p-5 text-left transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md"
+          >
+            <Card.icon className="w-5 h-5 text-slate-600" />
+            <div className="mt-4 text-2xl font-bold">{Card.value}</div>
+            <div className="text-sm text-slate-500">{Card.title}</div>
+          </button>
+        ))}
+      </section>
+
+      <section className="p-5 grid gap-4">
+        <div className="bg-amber-50 rounded-2xl shadow-sm border border-amber-200 p-5">
+          <div className="flex items-center gap-2 mb-4 text-amber-950">
+            <Megaphone className="w-5 h-5" />
+            <h2 className="font-semibold">Quadro de mensagens</h2>
+          </div>
+          <div className="grid gap-3">
+            {sortedAnnouncements.slice(0, 5).map((announcement) => (
+              <div
+                key={announcement.id}
+                className="rounded-xl bg-white border border-amber-200 p-4 text-sm text-slate-700 shadow-sm"
+              >
+                <div className="font-semibold text-slate-900">{announcement.title}</div>
+                <div className="mt-1 whitespace-pre-line">{announcement.message}</div>
+                <div className="mt-2 text-xs text-slate-500">
+                  {announcement.school?.name ?? 'Todas as escolas'}
+                </div>
+                <div className="mt-1 text-xs text-slate-500">
+                  Publicado por {announcement.createdBy || 'Direcao'}
+                </div>
+              </div>
+            ))}
+
+            {sortedAnnouncements.length === 0 && (
+              <div className="rounded-xl bg-white border border-amber-200 p-4 text-sm text-slate-600">
+                Nenhum aviso publicado.
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl shadow-sm border p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <CalendarDays className="w-5 h-5 text-slate-600" />
+            <h2 className="font-semibold">Substituicoes de hoje</h2>
+          </div>
+          <div className="grid gap-3">
+            {todaySubstitutions.map((substitution) => (
+              <div key={substitution.id} className="rounded-xl bg-slate-50 border p-4 text-sm">
+                <div className="font-semibold text-slate-900">
+                  {substitution.absence?.employee?.name || 'Servidor faltante nao informado'}
+                </div>
+                <div className="mt-1 text-slate-600">
+                  Substituto: {substitution.substituteTeacher?.name || 'Nao definido'}
+                </div>
+                <div className="mt-1 text-xs text-slate-500">
+                  {formatDashboardSchedule(substitution)} - {formatDashboardStatus(substitution.status)}
+                </div>
+              </div>
+            ))}
+
+            {todaySubstitutions.length === 0 && (
+              <div className="rounded-xl bg-slate-50 border p-4 text-sm text-slate-600">
+                Nenhuma substituicao programada para hoje.
+              </div>
+            )}
+          </div>
+        </div>
+      </section>
+
+      {popupStep === 'messages' && (
+        <Modal title="Quadro de mensagens" onClose={closeMessagesPopup}>
+          <div className="grid max-h-[60vh] gap-3 overflow-auto pr-1">
+            {sortedAnnouncements.map((announcement) => (
+              <div key={announcement.id} className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm">
+                <div className="font-semibold text-slate-900">{announcement.title}</div>
+                <div className="mt-2 whitespace-pre-line text-slate-700">{announcement.message}</div>
+                <div className="mt-3 text-xs text-slate-500">
+                  {announcement.school?.name ?? 'Todas as escolas'} - Publicado por {announcement.createdBy || 'Direcao'}
+                </div>
+              </div>
+            ))}
+
+            {sortedAnnouncements.length === 0 && (
+              <div className="rounded-xl border bg-slate-50 p-4 text-sm text-slate-600">
+                Nenhuma mensagem disponivel.
+              </div>
+            )}
+          </div>
+        </Modal>
+      )}
+
+      {popupStep === 'substitutions' && (
+        <Modal title="Substituicoes de hoje" onClose={closeSubstitutionsPopup}>
+          <div className="grid max-h-[60vh] gap-3 overflow-auto pr-1">
+            {todaySubstitutions.map((substitution) => (
+              <div key={substitution.id} className="rounded-xl border bg-slate-50 p-4 text-sm">
+                <div className="font-semibold text-slate-900">
+                  Faltante: {substitution.absence?.employee?.name || 'Nao informado'}
+                </div>
+                <div className="mt-1 text-slate-700">
+                  Substituto: {substitution.substituteTeacher?.name || 'Nao definido'}
+                </div>
+                <div className="mt-2 text-xs text-slate-500">
+                  {formatDashboardSchedule(substitution)} - {formatDashboardStatus(substitution.status)}
+                </div>
+              </div>
+            ))}
+
+            {todaySubstitutions.length === 0 && (
+              <div className="rounded-xl border bg-slate-50 p-4 text-sm text-slate-600">
+                Nenhuma substituicao programada para hoje.
+              </div>
+            )}
+          </div>
+        </Modal>
+      )}
+    </>
   );
 }
 
