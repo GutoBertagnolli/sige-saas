@@ -133,7 +133,7 @@ export default function SettingsPage() {
           <div className="max-w-xl space-y-5">
             <div>
               <label className="text-sm font-medium">
-                Prefeitura configurada
+                Cidade / Prefeitura
               </label>
               <input
                 value={municipalityName}
@@ -142,8 +142,8 @@ export default function SettingsPage() {
                 placeholder="Prefeitura de Pomerode"
               />
               <p className="mt-2 text-xs text-slate-500">
-                Este nome aparece no rodape do menu lateral e identifica o
-                ambiente configurado.
+                Este nome aparece no canto inferior esquerdo do sistema e
+                identifica o ambiente configurado.
               </p>
             </div>
 
