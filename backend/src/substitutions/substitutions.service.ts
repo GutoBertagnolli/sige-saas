@@ -385,6 +385,80 @@ export class SubstitutionsService {
     return this.attachTeachers(declined);
   }
 
+  async update(id: string, data: any) {
+    const substitution = await this.prisma.substitution.findUnique({
+      where: { id },
+    });
+
+    if (!substitution) {
+      throw new NotFoundException('Substituicao nao encontrada.');
+    }
+
+    if (
+      data.substituteTeacherId &&
+      data.substituteTeacherId !== substitution.substituteTeacherId
+    ) {
+      if (data.substituteTeacherId === substitution.originalTeacherId) {
+        throw new BadRequestException('O substituto deve ser diferente do servidor afastado.');
+      }
+
+      const simultaneousSubstitution = await this.prisma.substitution.findFirst({
+        where: {
+          id: {
+            not: id,
+          },
+          substituteTeacherId: data.substituteTeacherId,
+          timeSlotId: substitution.timeSlotId,
+          weekday: substitution.weekday,
+          status: {
+            not: SubstitutionStatus.CANCELLED,
+          },
+        },
+      });
+
+      if (simultaneousSubstitution) {
+        throw new ConflictException(
+          'Este servidor ja foi selecionado para outra substituicao neste mesmo dia e horario.',
+        );
+      }
+    }
+
+    const updated = await this.prisma.substitution.update({
+      where: { id },
+      data: {
+        substituteTeacherId:
+          data.substituteTeacherId === undefined
+            ? undefined
+            : data.substituteTeacherId || null,
+        status: data.status,
+        score:
+          data.score === undefined || data.score === null
+            ? undefined
+            : Number(data.score),
+      },
+      include: {
+        absence: {
+          include: {
+            employee: {
+              include: {
+                school: true,
+              },
+            },
+          },
+        },
+        classSchedule: {
+          include: {
+            class: true,
+          },
+        },
+        timeSlot: true,
+        scoreDetails: true,
+      },
+    });
+
+    return this.attachTeachers(updated);
+  }
+
   async remove(id: string) {
     const substitution = await this.prisma.substitution.findUnique({
       where: { id },

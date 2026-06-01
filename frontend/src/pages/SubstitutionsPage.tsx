@@ -47,6 +47,16 @@ async function getSubstitutions() {
   return response.data;
 }
 
+async function getEmployees() {
+  const response = await api.get<Employee[]>('/employees');
+  return response.data;
+}
+
+async function updateSubstitution(data: any) {
+  const response = await api.put<Substitution>(`/substitutions/${data.id}`, data);
+  return response.data;
+}
+
 async function deleteSubstitution(id: string) {
   const response = await api.delete(`/substitutions/${id}`);
   return response.data;
@@ -198,6 +208,11 @@ function canAcceptSubstitution(substitution: Substitution) {
 export default function SubstitutionsPage() {
   const queryClient = useQueryClient();
   const [now, setNow] = useState(Date.now());
+  const [editingSubstitution, setEditingSubstitution] =
+    useState<Substitution | null>(null);
+  const [substituteTeacherId, setSubstituteTeacherId] = useState('');
+  const [status, setStatus] = useState('PENDING_DIRECTOR');
+  const [score, setScore] = useState(0);
 
   useEffect(() => {
     const intervalId = window.setInterval(() => {
@@ -215,6 +230,11 @@ export default function SubstitutionsPage() {
   const { data: settings } = useQuery({
     queryKey: ['settings'],
     queryFn: getSettings,
+  });
+
+  const { data: employees = [] } = useQuery({
+    queryKey: ['employees'],
+    queryFn: getEmployees,
   });
 
   const acceptanceTimeoutMinutes =
@@ -244,6 +264,45 @@ export default function SubstitutionsPage() {
       alert('Erro ao aceitar substituição.');
     },
   });
+
+  const updateMutation = useMutation({
+    mutationFn: updateSubstitution,
+    onSuccess: async () => {
+      closeEditModal();
+      await queryClient.invalidateQueries({ queryKey: ['substitutions'] });
+      await queryClient.invalidateQueries({ queryKey: ['absences'] });
+    },
+    onError: (error: any) => {
+      alert(error?.response?.data?.message ?? 'Erro ao editar substituicao.');
+    },
+  });
+
+  function openEditModal(substitution: Substitution) {
+    setEditingSubstitution(substitution);
+    setSubstituteTeacherId(substitution.substituteTeacher?.id ?? '');
+    setStatus(substitution.status);
+    setScore(substitution.score ?? 0);
+  }
+
+  function closeEditModal() {
+    setEditingSubstitution(null);
+    setSubstituteTeacherId('');
+    setStatus('PENDING_DIRECTOR');
+    setScore(0);
+  }
+
+  function handleUpdate() {
+    if (!editingSubstitution) {
+      return;
+    }
+
+    updateMutation.mutate({
+      id: editingSubstitution.id,
+      substituteTeacherId: substituteTeacherId || null,
+      status,
+      score,
+    });
+  }
 
   function handleDelete(substitution: Substitution) {
     if (!confirm(`Apagar a substituição de ${substitution.substituteTeacher?.name ?? 'substituto'}?`)) {
@@ -338,6 +397,12 @@ export default function SubstitutionsPage() {
                     <td className="py-3">{substitution.score}</td>
                     <td className="py-3">
                       <div className="flex flex-wrap gap-2">
+                        <button
+                          onClick={() => openEditModal(substitution)}
+                          className="px-3 py-1 rounded-lg border bg-white text-xs hover:bg-slate-50"
+                        >
+                          Editar
+                        </button>
                         {canAcceptSubstitution(substitution) && (
                           <button
                             onClick={() => acceptMutation.mutate(substitution.id)}
@@ -362,7 +427,7 @@ export default function SubstitutionsPage() {
 
                 {substitutions.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="py-6 text-center text-slate-500">
+                    <td colSpan={8} className="py-6 text-center text-slate-500">
                       Nenhuma substituição registrada.
                     </td>
                   </tr>
@@ -372,6 +437,75 @@ export default function SubstitutionsPage() {
           </div>
         )}
       </div>
+
+      {editingSubstitution && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl border w-full max-w-xl p-6">
+            <h3 className="text-lg font-semibold mb-1">Editar substituicao</h3>
+            <p className="text-sm text-slate-500 mb-5">
+              Ajuste substituto, situacao e pontuacao.
+            </p>
+
+            <div className="space-y-4">
+              <div>
+                <label className="text-sm font-medium">Substituto</label>
+                <select
+                  value={substituteTeacherId}
+                  onChange={(event) => setSubstituteTeacherId(event.target.value)}
+                  className="mt-1 w-full border rounded-xl px-3 py-2 text-sm"
+                >
+                  <option value="">Sem substituto</option>
+                  {employees.map((employee) => (
+                    <option key={employee.id} value={employee.id}>
+                      {employee.name} - {translateRole(employee.roleType)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-sm font-medium">Situacao</label>
+                  <select
+                    value={status}
+                    onChange={(event) => setStatus(event.target.value)}
+                    className="mt-1 w-full border rounded-xl px-3 py-2 text-sm"
+                  >
+                    <option value="PENDING_DIRECTOR">Aguardando aceite</option>
+                    <option value="SENT_TO_TEACHER">Enviado ao professor</option>
+                    <option value="ACCEPTED">Aceito</option>
+                    <option value="DECLINED">Recusado</option>
+                    <option value="CANCELLED">Cancelado</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-sm font-medium">Pontuacao</label>
+                  <input
+                    type="number"
+                    value={score}
+                    onChange={(event) => setScore(Number(event.target.value))}
+                    className="mt-1 w-full border rounded-xl px-3 py-2 text-sm"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 mt-6">
+              <button onClick={closeEditModal} className="px-4 py-2 rounded-xl text-sm border">
+                Cancelar
+              </button>
+              <button
+                onClick={handleUpdate}
+                disabled={updateMutation.isPending}
+                className="px-4 py-2 rounded-xl text-sm bg-slate-900 text-white disabled:opacity-60"
+              >
+                {updateMutation.isPending ? 'Salvando...' : 'Salvar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }

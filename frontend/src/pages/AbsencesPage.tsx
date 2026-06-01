@@ -83,7 +83,13 @@ async function getAbsences() {
   return response.data;
 }
 
-async function createAbsence(data: any) {
+async function saveAbsence(data: any) {
+  if (data.id) {
+    const { id, ...payload } = data;
+    const response = await api.put(`/absences/${id}`, payload);
+    return response.data;
+  }
+
   const response = await api.post('/absences', data);
   return response.data;
 }
@@ -273,6 +279,7 @@ export default function AbsencesPage() {
   const [replacementSuggestions, setReplacementSuggestions] = useState<ReplacementSuggestion[]>([]);
   const [selectedSubstitutions, setSelectedSubstitutions] = useState<Substitution[]>([]);
   const [now, setNow] = useState(Date.now());
+  const [editingAbsence, setEditingAbsence] = useState<Absence | null>(null);
 
   useEffect(() => {
     const intervalId = window.setInterval(() => {
@@ -415,19 +422,17 @@ export default function AbsencesPage() {
   }
 
   const createMutation = useMutation({
-    mutationFn: createAbsence,
+    mutationFn: saveAbsence,
     onSuccess: async (savedAbsence: Absence) => {
-      alert('Afastamento salvo com sucesso.');
+      alert(editingAbsence ? 'Afastamento atualizado com sucesso.' : 'Afastamento salvo com sucesso.');
 
-      await loadReplacementSuggestions(savedAbsence);
+      if (!editingAbsence) {
+        await loadReplacementSuggestions(savedAbsence);
+      }
 
       await queryClient.invalidateQueries({ queryKey: ['absences'] });
 
-      setEmployeeId('');
-      setStartDate('');
-      setEndDate('');
-      setReason('ATESTADO');
-      setDescription('');
+      resetAbsenceForm();
     },
     onError: (error: any) => {
       alert(error?.response?.data?.message ?? 'Erro ao salvar afastamento.');
@@ -448,6 +453,7 @@ export default function AbsencesPage() {
     }
 
     createMutation.mutate({
+      id: editingAbsence?.id,
       employeeId,
       startDate: `${startDate}T00:00:00.000Z`,
       endDate: `${endDate}T23:59:59.000Z`,
@@ -455,6 +461,28 @@ export default function AbsencesPage() {
       status: 'OPEN',
       type: reason,
     });
+  }
+
+  function resetAbsenceForm() {
+    setEditingAbsence(null);
+    setEmployeeId('');
+    setStartDate('');
+    setEndDate('');
+    setReason('ATESTADO');
+    setDescription('');
+  }
+
+  function toInputDate(value?: string) {
+    return value ? new Date(value).toISOString().slice(0, 10) : '';
+  }
+
+  function handleEditAbsence(absence: Absence) {
+    setEditingAbsence(absence);
+    setEmployeeId(absence.employeeId || absence.employee?.id || '');
+    setStartDate(toInputDate(absence.startDate));
+    setEndDate(toInputDate(absence.endDate));
+    setReason(absence.reason || absence.type || 'ATESTADO');
+    setDescription('');
   }
 
   function handleSelectSubstitute(slot: ReplacementSuggestion, replacement: ReplacementSuggestion['replacements'][number]) {
@@ -565,10 +593,25 @@ export default function AbsencesPage() {
               disabled={createMutation.isPending}
               className="w-full bg-slate-900 text-white rounded-xl px-4 py-2 text-sm disabled:opacity-60"
             >
-              {createMutation.isPending ? 'Salvando...' : 'Salvar afastamento'}
+              {createMutation.isPending
+                ? 'Salvando...'
+                : editingAbsence
+                  ? 'Salvar alteracoes'
+                  : 'Salvar afastamento'}
             </button>
           </div>
         </div>
+
+        {editingAbsence && (
+          <div className="mb-6">
+            <button
+              onClick={resetAbsenceForm}
+              className="rounded-xl border px-4 py-2 text-sm hover:bg-slate-50"
+            >
+              Cancelar edicao
+            </button>
+          </div>
+        )}
 
         <div className="mb-6">
           <label className="text-sm font-medium">Observações</label>
@@ -772,6 +815,12 @@ export default function AbsencesPage() {
                   <td className="py-3">{absence.substitutions?.length ?? 0}</td>
                   <td className="py-3">
                     <div className="flex flex-wrap gap-2">
+                      <button
+                        onClick={() => handleEditAbsence(absence)}
+                        className="px-3 py-1 rounded-lg border text-xs hover:bg-slate-50"
+                      >
+                        Editar
+                      </button>
                       <button
                         onClick={() => loadReplacementSuggestions(absence)}
                         className="px-3 py-1 rounded-lg border text-xs hover:bg-slate-50"
