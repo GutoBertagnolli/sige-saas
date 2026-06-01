@@ -4,6 +4,9 @@ import { PrismaService } from '../common/prisma.service';
 const DEFAULT_ACCEPTANCE_TIMEOUT_MINUTES = 30;
 const ACCEPTANCE_TIMEOUT_KEY = 'substitutionAcceptanceTimeoutMinutes';
 const ACCEPTANCE_TIMEOUT_ID = 'setting-substitution-acceptance-timeout';
+const DEFAULT_MUNICIPALITY_NAME = 'Prefeitura de Pomerode';
+const MUNICIPALITY_NAME_KEY = 'municipalityName';
+const MUNICIPALITY_NAME_ID = 'setting-municipality-name';
 const ACCESS_PROFILES = {
   SECRETARIA: {
     roleName: 'SECRETARIA',
@@ -32,6 +35,10 @@ export class SettingsService {
   constructor(private prisma: PrismaService) {}
 
   async getSubstitutionAcceptanceTimeoutMinutes() {
+    if (municipalityName.length < 2 || municipalityName.length > 120) {
+      throw new BadRequestException('Informe o nome da prefeitura.');
+    }
+
     await this.ensureSettingsTable();
 
     const rows = await this.prisma.$queryRaw<SettingRow[]>`
@@ -54,13 +61,16 @@ export class SettingsService {
     return {
       substitutionAcceptanceTimeoutMinutes:
         await this.getSubstitutionAcceptanceTimeoutMinutes(),
+      municipalityName: await this.getMunicipalityName(),
     };
   }
 
   async updatePublicSettings(data: {
     substitutionAcceptanceTimeoutMinutes?: number;
+    municipalityName?: string;
   }) {
     const timeout = Number(data.substitutionAcceptanceTimeoutMinutes);
+    const municipalityName = String(data.municipalityName || DEFAULT_MUNICIPALITY_NAME).trim();
 
     if (!Number.isInteger(timeout) || timeout < 1 || timeout > 1440) {
       throw new BadRequestException(
@@ -76,6 +86,19 @@ export class SettingsService {
         ${ACCEPTANCE_TIMEOUT_ID},
         ${ACCEPTANCE_TIMEOUT_KEY},
         ${String(timeout)},
+        now(),
+        now()
+      )
+      ON CONFLICT (key)
+      DO UPDATE SET value = EXCLUDED.value, "updatedAt" = now()
+    `;
+
+    await this.prisma.$executeRaw`
+      INSERT INTO "SystemSetting" (id, key, value, "createdAt", "updatedAt")
+      VALUES (
+        ${MUNICIPALITY_NAME_ID},
+        ${MUNICIPALITY_NAME_KEY},
+        ${municipalityName},
         now(),
         now()
       )
@@ -167,6 +190,19 @@ export class SettingsService {
         "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
       )
     `;
+  }
+
+  private async getMunicipalityName() {
+    await this.ensureSettingsTable();
+
+    const rows = await this.prisma.$queryRaw<SettingRow[]>`
+      SELECT value
+      FROM "SystemSetting"
+      WHERE key = ${MUNICIPALITY_NAME_KEY}
+      LIMIT 1
+    `;
+
+    return rows[0]?.value || DEFAULT_MUNICIPALITY_NAME;
   }
 
   private normalizeAccessProfile(accessProfile?: string) {

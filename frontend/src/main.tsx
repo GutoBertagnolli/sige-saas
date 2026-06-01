@@ -70,6 +70,11 @@ type DashboardAnnouncement = {
   } | null;
 };
 
+type SystemSettings = {
+  substitutionAcceptanceTimeoutMinutes: number;
+  municipalityName: string;
+};
+
 type AuthEmployee = {
   id: string;
   name: string;
@@ -98,6 +103,11 @@ const ADMIN_ROLES = ['SECRETARIA', 'DIRETOR', 'ORIENTADOR', 'ADMIN', 'ADMINISTRA
 
 async function getActiveAnnouncements() {
   const response = await api.get<DashboardAnnouncement[]>('/announcements/active');
+  return response.data;
+}
+
+async function getSystemSettings() {
+  const response = await api.get<SystemSettings>('/settings');
   return response.data;
 }
 
@@ -143,16 +153,23 @@ function Layout({
 }) {
   const location = useLocation();
   const current = menu.find((item) => item.path === location.pathname);
+  const { data: settings } = useQuery({
+    queryKey: ['settings'],
+    queryFn: getSystemSettings,
+  });
+  const municipalityName = settings?.municipalityName || 'Prefeitura de Pomerode';
 
   return (
     <div className="min-h-screen flex bg-slate-50">
       <aside className="hidden md:flex w-72 bg-slate-900 text-white flex-col p-5">
         <div className="mb-8">
           <div className="text-xl font-bold">SIGE</div>
-          <div className="text-xs text-slate-300">by SUPORTIVA</div>
+          <div className="text-xs text-slate-300">
+            Sistema Integrado de Gestao Educacional
+          </div>
         </div>
 
-        <nav className="space-y-1">
+        <nav className="space-y-1 flex-1">
           {menu.map((item) => {
             const active = location.pathname === item.path;
 
@@ -171,6 +188,10 @@ function Layout({
             );
           })}
         </nav>
+
+        <div className="border-t border-slate-700 pt-4 text-xs text-slate-300">
+          {municipalityName}
+        </div>
       </aside>
 
       <main className="flex-1">
@@ -618,16 +639,20 @@ function LoginPage({ onLogin }: { onLogin: (session: AuthSession) => void }) {
         onSubmit={handleSubmit}
         className="w-full max-w-md rounded-2xl border bg-white p-6 shadow-sm"
       >
-        <h1 className="text-xl font-semibold">Entrar no SIGE</h1>
-        <p className="mt-1 text-sm text-slate-500">
-          Use o login e senha gerados no cadastro do servidor.
+        <div className="text-center">
+          <h1 className="text-3xl font-bold tracking-normal">SIGE</h1>
+          <p className="mt-1 text-sm text-slate-500">
+            Sistema Integrado de Gestao Educacional
+          </p>
+        </div>
+        <p className="mt-6 text-center text-sm text-slate-600">
+          Use o login e senha recebido por Email e/ou WhatsApp.
         </p>
 
         {error && (
           <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
             {error}
           </div>
-          <UserMenu user={user} onLogout={onLogout} onUserUpdate={onUserUpdate} />
         )}
 
         <div className="mt-6 space-y-4">

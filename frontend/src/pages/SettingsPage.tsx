@@ -4,6 +4,7 @@ import { api } from '../services/api';
 
 type SystemSettings = {
   substitutionAcceptanceTimeoutMinutes: number;
+  municipalityName: string;
 };
 
 type AccessUser = {
@@ -54,6 +55,7 @@ export default function SettingsPage() {
   const queryClient = useQueryClient();
   const [substitutionAcceptanceTimeoutMinutes, setSubstitutionAcceptanceTimeoutMinutes] =
     useState(30);
+  const [municipalityName, setMunicipalityName] = useState('Prefeitura de Pomerode');
 
   const { data: settings, isLoading, isError } = useQuery({
     queryKey: ['settings'],
@@ -70,6 +72,7 @@ export default function SettingsPage() {
       setSubstitutionAcceptanceTimeoutMinutes(
         settings.substitutionAcceptanceTimeoutMinutes,
       );
+      setMunicipalityName(settings.municipalityName || 'Prefeitura de Pomerode');
     }
   }, [settings]);
 
@@ -100,6 +103,7 @@ export default function SettingsPage() {
   function handleSave() {
     updateMutation.mutate({
       substitutionAcceptanceTimeoutMinutes,
+      municipalityName,
     });
   }
 
@@ -127,6 +131,22 @@ export default function SettingsPage() {
 
         {!isLoading && !isError && (
           <div className="max-w-xl space-y-5">
+            <div>
+              <label className="text-sm font-medium">
+                Prefeitura configurada
+              </label>
+              <input
+                value={municipalityName}
+                onChange={(event) => setMunicipalityName(event.target.value)}
+                className="mt-1 w-full border rounded-xl px-3 py-2 text-sm"
+                placeholder="Prefeitura de Pomerode"
+              />
+              <p className="mt-2 text-xs text-slate-500">
+                Este nome aparece no rodape do menu lateral e identifica o
+                ambiente configurado.
+              </p>
+            </div>
+
             <div>
               <label className="text-sm font-medium">
                 Tempo para aceite automatico da substituicao
