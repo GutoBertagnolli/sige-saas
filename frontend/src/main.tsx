@@ -194,7 +194,7 @@ function Layout({
         </div>
       </aside>
 
-      <main className="flex-1">
+      <main className="flex-1 flex min-h-screen flex-col">
         <header className="bg-white border-b px-5 py-4 flex items-center justify-between">
           <div>
             <h1 className="text-xl font-semibold">
@@ -219,6 +219,7 @@ function Layout({
           <UserMenu user={user} onLogout={onLogout} onUserUpdate={onUserUpdate} />
         </header>
 
+        <div className="flex-1">
         <Routes>
           <Route path="/servidores/:employeeId/planner" element={<EmployeePlannerPage />} />
           <Route path="/dashboard" element={<Dashboard />} />
@@ -233,6 +234,11 @@ function Layout({
           <Route path="/configuracoes" element={<SettingsPage />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
+        </div>
+
+        <footer className="border-t bg-white px-5 py-3 text-center text-xs text-slate-500">
+          © 2026 SUPORTIVA LTDA. Todos os direitos reservados. Metodologia, fluxos operacionais e sistema protegidos pela legislação de direitos autorais e propriedade intelectual.
+        </footer>
       </main>
     </div>
   );
