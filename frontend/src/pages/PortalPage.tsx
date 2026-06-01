@@ -30,6 +30,7 @@ type Announcement = {
   id: string;
   title: string;
   message: string;
+  imageUrl?: string | null;
   priority: number;
   createdBy?: string | null;
   school?: {
@@ -275,9 +276,16 @@ export default function PortalPage() {
                 }`}
               >
                 <h3 className="font-semibold">{announcement.title}</h3>
-                <p className="mt-1 whitespace-pre-wrap text-sm text-slate-700">
+                <p className="mt-1 whitespace-pre-wrap break-words text-sm text-slate-700">
                   {announcement.message}
                 </p>
+                {announcement.imageUrl && (
+                  <img
+                    src={announcement.imageUrl}
+                    alt={announcement.title}
+                    className="mt-3 max-h-80 w-full rounded-xl border bg-white object-contain"
+                  />
+                )}
                 <div className="mt-2 text-xs text-slate-500">
                   {announcement.school?.name ?? 'Todas as escolas'}
                 </div>

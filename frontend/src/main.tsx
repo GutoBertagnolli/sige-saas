@@ -77,6 +77,7 @@ type DashboardAnnouncement = {
   id: string;
   title: string;
   message: string;
+  imageUrl?: string | null;
   priority?: number;
   createdBy?: string | null;
   school?: {
@@ -591,7 +592,7 @@ function Modal({
 }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="w-full max-w-lg rounded-2xl border bg-white p-6 shadow-xl">
+      <div className="max-h-[90vh] w-full max-w-2xl overflow-auto rounded-2xl border bg-white p-4 shadow-xl sm:p-6">
         <div className="mb-5 flex items-center justify-between gap-3">
           <h2 className="text-lg font-semibold">{title}</h2>
           <button onClick={onClose} className="rounded-lg border px-3 py-1 text-sm text-slate-600">
@@ -925,7 +926,14 @@ function DashboardHome() {
                 className="rounded-xl bg-white border border-amber-200 p-4 text-sm text-slate-700 shadow-sm"
               >
                 <div className="font-semibold text-slate-900">{announcement.title}</div>
-                <div className="mt-1 whitespace-pre-line">{announcement.message}</div>
+                <div className="mt-1 whitespace-pre-line break-words">{announcement.message}</div>
+                {announcement.imageUrl && (
+                  <img
+                    src={announcement.imageUrl}
+                    alt={announcement.title}
+                    className="mt-3 max-h-80 w-full rounded-xl border bg-white object-contain"
+                  />
+                )}
                 <div className="mt-2 text-xs text-slate-500">
                   {announcement.school?.name ?? 'Todas as escolas'}
                 </div>
@@ -978,7 +986,14 @@ function DashboardHome() {
             {sortedAnnouncements.map((announcement) => (
               <div key={announcement.id} className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm">
                 <div className="font-semibold text-slate-900">{announcement.title}</div>
-                <div className="mt-2 whitespace-pre-line text-slate-700">{announcement.message}</div>
+                <div className="mt-2 whitespace-pre-line break-words text-slate-700">{announcement.message}</div>
+                {announcement.imageUrl && (
+                  <img
+                    src={announcement.imageUrl}
+                    alt={announcement.title}
+                    className="mt-3 max-h-[45vh] w-full rounded-xl border bg-white object-contain"
+                  />
+                )}
                 <div className="mt-3 text-xs text-slate-500">
                   {announcement.school?.name ?? 'Todas as escolas'} - Publicado por {announcement.createdBy || 'Direcao'}
                 </div>

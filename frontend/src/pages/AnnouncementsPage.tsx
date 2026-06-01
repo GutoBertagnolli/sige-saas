@@ -12,6 +12,7 @@ type Announcement = {
   id: string;
   title: string;
   message: string;
+  imageUrl?: string | null;
   visibilityType: string;
   priority: number;
   targetRoleType?: string | null;
@@ -95,16 +96,24 @@ function getErrorMessage(error: any, fallback: string) {
 
 export default function AnnouncementsPage() {
   const queryClient = useQueryClient();
+  const currentUserName = (() => {
+    try {
+      const stored = localStorage.getItem('sige_admin_session');
+      return JSON.parse(stored || '{}')?.user?.name || 'Usuario logado';
+    } catch {
+      return 'Usuario logado';
+    }
+  })();
 
   const [title, setTitle] = useState('');
   const [message, setMessage] = useState('');
+  const [imageUrl, setImageUrl] = useState('');
   const [schoolId, setSchoolId] = useState('');
   const [visibilityType, setVisibilityType] = useState('ALL');
   const [targetRoleType, setTargetRoleType] = useState('');
   const [priority, setPriority] = useState(2);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
-  const [createdBy, setCreatedBy] = useState('Direcao');
   const [editingAnnouncement, setEditingAnnouncement] =
     useState<Announcement | null>(null);
 
@@ -126,13 +135,13 @@ export default function AnnouncementsPage() {
   function resetForm() {
     setTitle('');
     setMessage('');
+    setImageUrl('');
     setSchoolId('');
     setVisibilityType('ALL');
     setTargetRoleType('');
     setPriority(2);
     setStartDate('');
     setEndDate('');
-    setCreatedBy('Direcao');
     setEditingAnnouncement(null);
   }
 
@@ -178,8 +187,23 @@ export default function AnnouncementsPage() {
       priority,
       startDate: startDate ? `${startDate}T00:00:00.000Z` : null,
       endDate: endDate ? `${endDate}T23:59:59.000Z` : null,
-      createdBy,
+      imageUrl: imageUrl || null,
     };
+  }
+
+  function handleImageFile(file?: File) {
+    if (!file) {
+      return;
+    }
+
+    if (!file.type.startsWith('image/')) {
+      alert('Selecione um arquivo de imagem.');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => setImageUrl(String(reader.result || ''));
+    reader.readAsDataURL(file);
   }
 
   function handleSubmit() {
@@ -204,7 +228,7 @@ export default function AnnouncementsPage() {
     setPriority(announcement.priority || 2);
     setStartDate(toInputDate(announcement.startDate));
     setEndDate(toInputDate(announcement.endDate));
-    setCreatedBy(announcement.createdBy || 'Direcao');
+    setImageUrl(announcement.imageUrl || '');
   }
 
   function handleDelete(announcement: Announcement) {
@@ -254,26 +278,40 @@ export default function AnnouncementsPage() {
               />
             </div>
 
+            <div className="rounded-xl border bg-slate-50 px-3 py-2 text-sm text-slate-600">
+              Publicado por: <span className="font-medium text-slate-900">{currentUserName}</span>
+            </div>
+
             <div>
-              <label className="text-sm font-medium">Publicado por</label>
-              <select
-                value={createdBy}
-                onChange={(event) => setCreatedBy(event.target.value)}
-                className="mt-1 w-full border rounded-xl px-3 py-2 text-sm"
-              >
-                <option value="Direcao">Direcao</option>
-                {accessUsers
-                  .filter((user) =>
-                    ['SECRETARIA', 'DIRETOR', 'ORIENTADOR'].includes(
-                      user.accessProfile,
-                    ),
-                  )
-                  .map((user) => (
-                    <option key={user.id} value={user.name}>
-                      {user.name}
-                    </option>
-                  ))}
-              </select>
+              <label className="text-sm font-medium">Imagem do aviso</label>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(event) => handleImageFile(event.target.files?.[0])}
+                className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
+              />
+              <input
+                value={imageUrl}
+                onChange={(event) => setImageUrl(event.target.value)}
+                className="mt-2 w-full rounded-xl border px-3 py-2 text-sm"
+                placeholder="Ou cole uma URL de imagem"
+              />
+              {imageUrl && (
+                <div className="mt-3 rounded-xl border bg-slate-50 p-2">
+                  <img
+                    src={imageUrl}
+                    alt="Previa do aviso"
+                    className="max-h-56 w-full rounded-lg object-contain"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setImageUrl('')}
+                    className="mt-2 rounded-lg border bg-white px-3 py-1 text-xs text-slate-700 hover:bg-slate-100"
+                  >
+                    Remover imagem
+                  </button>
+                </div>
+              )}
             </div>
 
             <div>
@@ -409,6 +447,13 @@ export default function AnnouncementsPage() {
                       <p className="mt-1 whitespace-pre-wrap text-sm text-slate-700">
                         {announcement.message}
                       </p>
+                      {announcement.imageUrl && (
+                        <img
+                          src={announcement.imageUrl}
+                          alt={announcement.title}
+                          className="mt-3 max-h-80 w-full rounded-xl border bg-white object-contain"
+                        />
+                      )}
                       <div className="mt-2 text-xs text-slate-500">
                         Publicado por {announcement.createdBy || 'Direcao'}
                       </div>

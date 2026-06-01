@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../common/prisma.service';
 
@@ -20,7 +21,10 @@ type AnnouncementRow = {
 
 @Injectable()
 export class AnnouncementsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private jwt: JwtService,
+  ) {}
 
   private async resolveTenantId(tenantId?: string) {
     if (tenantId) {
@@ -123,6 +127,32 @@ export class AnnouncementsService {
           }
         : null,
     }));
+  }
+
+  private async resolveCreatedBy(authorization?: string, fallback?: string) {
+    const fallbackName = fallback?.trim() || 'Direcao';
+    const token = authorization?.replace(/^Bearer\s+/i, '').trim();
+
+    if (!token) {
+      return fallbackName;
+    }
+
+    try {
+      const payload: any = this.jwt.verify(token);
+      const user = await this.prisma.user.findUnique({
+        where: {
+          id: payload.sub,
+        },
+        select: {
+          name: true,
+          active: true,
+        },
+      });
+
+      return user?.active && user.name ? user.name : fallbackName;
+    } catch {
+      return fallbackName;
+    }
   }
 
   private async findById(id: string) {
@@ -286,7 +316,7 @@ export class AnnouncementsService {
     return this.mapRows(rows);
   }
 
-  async create(data: any) {
+  async create(data: any, authorization?: string) {
     if (!data.title?.trim()) {
       throw new BadRequestException('Titulo e obrigatorio.');
     }
@@ -302,6 +332,7 @@ export class AnnouncementsService {
     const priority = Number(data.priority || 2);
     const startDate = data.startDate ? new Date(data.startDate) : null;
     const endDate = data.endDate ? new Date(data.endDate) : null;
+    const createdBy = await this.resolveCreatedBy(authorization, data.createdBy);
     const targetRoleType =
       hasTargetRoleType && data.targetRoleType
         ? data.targetRoleType === 'COORDENADOR'
@@ -317,7 +348,7 @@ export class AnnouncementsService {
           "createdAt"
         )
         VALUES (
-          ${id}, ${tenantId}, ${data.schoolId || null}, ${data.createdBy || 'Direcao'},
+          ${id}, ${tenantId}, ${data.schoolId || null}, ${createdBy},
           ${data.title}, ${data.message}, ${data.imageUrl || null},
           ${data.visibilityType || 'ALL'}, ${Number.isFinite(priority) ? priority : 2},
           ${targetRoleType}::"EmployeeRoleType", ${startDate}, ${endDate}, now()
@@ -331,7 +362,7 @@ export class AnnouncementsService {
           "createdAt"
         )
         VALUES (
-          ${id}, ${tenantId}, ${data.schoolId || null}, ${data.createdBy || 'Direcao'},
+          ${id}, ${tenantId}, ${data.schoolId || null}, ${createdBy},
           ${data.title}, ${data.message}, ${data.imageUrl || null},
           ${data.visibilityType || 'ALL'}, ${Number.isFinite(priority) ? priority : 2},
           NULL, ${startDate}, ${endDate}, now()
@@ -344,7 +375,7 @@ export class AnnouncementsService {
           "visibilityType", "startDate", "endDate", "createdAt"
         )
         VALUES (
-          ${id}, ${tenantId}, ${data.schoolId || null}, ${data.createdBy || 'Direcao'},
+          ${id}, ${tenantId}, ${data.schoolId || null}, ${createdBy},
           ${data.title}, ${data.message}, ${data.imageUrl || null},
           ${data.visibilityType || 'ALL'}, ${startDate}, ${endDate}, now()
         )
@@ -354,7 +385,7 @@ export class AnnouncementsService {
     return this.findById(id);
   }
 
-  async update(id: string, data: any) {
+  async update(id: string, data: any, authorization?: string) {
     if (!data.title?.trim()) {
       throw new BadRequestException('Titulo e obrigatorio.');
     }
@@ -374,6 +405,7 @@ export class AnnouncementsService {
     const priority = Number(data.priority || 2);
     const startDate = data.startDate ? new Date(data.startDate) : null;
     const endDate = data.endDate ? new Date(data.endDate) : null;
+    const createdBy = await this.resolveCreatedBy(authorization, data.createdBy);
     const targetRoleType =
       hasTargetRoleType && data.targetRoleType
         ? data.targetRoleType === 'COORDENADOR'
@@ -386,6 +418,7 @@ export class AnnouncementsService {
         UPDATE "Announcement"
         SET
           "schoolId" = ${data.schoolId || null},
+          "createdBy" = ${createdBy},
           title = ${data.title},
           message = ${data.message},
           "imageUrl" = ${data.imageUrl || null},
@@ -401,6 +434,7 @@ export class AnnouncementsService {
         UPDATE "Announcement"
         SET
           "schoolId" = ${data.schoolId || null},
+          "createdBy" = ${createdBy},
           title = ${data.title},
           message = ${data.message},
           "imageUrl" = ${data.imageUrl || null},
@@ -416,6 +450,7 @@ export class AnnouncementsService {
         UPDATE "Announcement"
         SET
           "schoolId" = ${data.schoolId || null},
+          "createdBy" = ${createdBy},
           title = ${data.title},
           message = ${data.message},
           "imageUrl" = ${data.imageUrl || null},
