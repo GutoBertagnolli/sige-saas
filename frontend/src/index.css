@@ -16,6 +16,10 @@ body {
 }
 
 @media (max-width: 640px) {
+  html {
+    font-size: 17px;
+  }
+
   section.p-5 {
     padding: 1rem;
   }
@@ -26,6 +30,34 @@ body {
 
   .rounded-2xl {
     border-radius: 0.75rem;
+  }
+
+  .text-xs {
+    font-size: 0.82rem;
+    line-height: 1.25rem;
+  }
+
+  .text-sm {
+    font-size: 0.95rem;
+    line-height: 1.45rem;
+  }
+
+  input,
+  select,
+  textarea,
+  button {
+    font-size: 1rem;
+  }
+
+  input,
+  select,
+  textarea {
+    min-height: 2.75rem;
+  }
+
+  button,
+  a {
+    min-height: 2.5rem;
   }
 
   .overflow-auto > table {
