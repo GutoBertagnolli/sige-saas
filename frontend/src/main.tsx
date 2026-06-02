@@ -38,6 +38,7 @@ import {
   useNavigate,
 } from 'react-router-dom';
 import './index.css';
+import sigeLogoSimple from './assets/sige-logo-simple.png';
 import sigeLogoWhite from './assets/sige-logo-white.png';
 import { APP_VERSION } from './version';
 import { api, clearAuthToken, setAuthToken } from './services/api';
@@ -728,7 +729,11 @@ function LoginPage({ onLogin }: { onLogin: (session: AuthSession) => void }) {
         className="w-full max-w-md rounded-2xl border bg-white p-6 shadow-sm"
       >
         <div className="text-center">
-          <h1 className="text-3xl font-bold tracking-normal">SIGE</h1>
+          <img
+            src={sigeLogoSimple}
+            alt="SIGE"
+            className="mx-auto h-9 w-auto object-contain"
+          />
           <p className="mt-1 text-sm text-slate-500">
             Sistema Integrado de Gestao Educacional
           </p>
