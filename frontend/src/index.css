@@ -14,3 +14,27 @@ body {
   min-height: 100vh;
   background: #f8fafc;
 }
+
+@media (max-width: 640px) {
+  section.p-5 {
+    padding: 1rem;
+  }
+
+  .p-6 {
+    padding: 1rem;
+  }
+
+  .rounded-2xl {
+    border-radius: 0.75rem;
+  }
+
+  .overflow-auto > table {
+    min-width: 680px;
+  }
+
+  .fixed.inset-0 > .rounded-2xl,
+  .fixed.inset-0 > div[class*='max-w-'] {
+    max-height: calc(100vh - 2rem);
+    overflow: auto;
+  }
+}

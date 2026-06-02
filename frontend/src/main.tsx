@@ -23,10 +23,12 @@ import {
   GraduationCap,
   KeyRound,
   LogOut,
+  Menu,
   Megaphone,
   School,
   UserCircle,
   Users,
+  X,
 } from 'lucide-react';
 import {
   BrowserRouter,
@@ -231,6 +233,7 @@ function Layout({
 }) {
   const location = useLocation();
   const current = menu.find((item) => item.path === location.pathname);
+  const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
   const { data: settings } = useQuery({
     queryKey: ['settings'],
     queryFn: getSystemSettings,
@@ -276,30 +279,86 @@ function Layout({
         </div>
       </aside>
 
-      <main className="flex-1 flex min-h-screen flex-col">
-        <header className="bg-white border-b px-5 py-4 flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-semibold">
-              {current?.label || 'SIGE'}
-            </h1>
-            <p className="text-sm text-slate-500">
-              Fundação inicial do SIGE by SUPORTIVA
-            </p>
-          </div>
-          <div className="text-right text-xs text-slate-500 hidden">
-            <div>sige.suportiva.org</div>
-            <div className="mt-1">{user.name}</div>
+      <main className="flex-1 flex min-h-screen min-w-0 flex-col">
+        <header className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b bg-white px-4 py-3 md:px-5 md:py-4">
+          <div className="flex min-w-0 items-center gap-3">
             <button
-              onClick={onLogout}
-              className="mt-2 inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs text-slate-600 hover:bg-slate-50"
+              type="button"
+              onClick={() => setMobileMenuOpen(true)}
+              className="inline-flex h-10 w-10 flex-none items-center justify-center rounded-xl border text-slate-700 md:hidden"
+              aria-label="Abrir menu"
             >
-              <LogOut className="h-3 w-3" />
-              Sair
+              <Menu className="h-5 w-5" />
             </button>
-            <div>Versão {APP_VERSION}</div>
+            <div className="min-w-0">
+              <h1 className="truncate text-lg font-semibold md:text-xl">
+                {current?.label || 'SIGE'}
+              </h1>
+              <p className="hidden text-sm text-slate-500 sm:block">
+                Fundação inicial do SIGE by SUPORTIVA
+              </p>
+            </div>
           </div>
           <UserMenu user={user} onLogout={onLogout} onUserUpdate={onUserUpdate} />
         </header>
+
+        {mobileMenuOpen && (
+          <div className="fixed inset-0 z-50 md:hidden">
+            <button
+              type="button"
+              className="absolute inset-0 bg-black/40"
+              aria-label="Fechar menu"
+              onClick={() => setMobileMenuOpen(false)}
+            />
+            <aside className="relative flex h-full w-[min(86vw,320px)] flex-col bg-slate-900 p-5 text-white shadow-2xl">
+              <div className="mb-6 flex items-start justify-between gap-3">
+                <div>
+                  <img
+                    src={sigeLogoWhite}
+                    alt="SIGE"
+                    className="h-7 w-auto object-contain"
+                  />
+                  <div className="mt-1 text-xs text-slate-300">
+                    Sistema Integrado de Gestao Educacional
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="inline-flex h-10 w-10 flex-none items-center justify-center rounded-xl border border-slate-700 text-slate-200"
+                  aria-label="Fechar menu"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              <nav className="flex-1 space-y-1 overflow-auto">
+                {menu.map((item) => {
+                  const active = location.pathname === item.path;
+
+                  return (
+                    <Link
+                      key={item.path}
+                      to={item.path}
+                      onClick={() => setMobileMenuOpen(false)}
+                      className={`block w-full rounded-xl px-3 py-3 text-left text-sm transition ${
+                        active
+                          ? 'bg-slate-700 text-white'
+                          : 'text-slate-200 hover:bg-slate-800'
+                      }`}
+                    >
+                      {item.label}
+                    </Link>
+                  );
+                })}
+              </nav>
+
+              <div className="border-t border-slate-700 pt-4 text-xs text-slate-300">
+                {municipalityName}
+              </div>
+            </aside>
+          </div>
+        )}
 
         <div className="flex-1">
         <Routes>
