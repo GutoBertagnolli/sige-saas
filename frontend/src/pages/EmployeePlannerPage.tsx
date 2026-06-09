@@ -26,17 +26,30 @@ type TimeTemplate = {
   slots: Slot[];
 };
 
+type ClassItem = {
+  id: string;
+  name: string;
+  shift: string;
+  school?: { id: string; name: string } | null;
+  template?: { id: string; name: string } | null;
+};
+
 type WeeklySchedule = {
   id: string;
   weekday: string;
   type: string;
   timeSlotId: string;
+  classId?: string | null;
+  class?: { id: string; name: string } | null;
+  room?: string | null;
   requiresSubstitution?: boolean;
 };
 
 type LocalCell = {
   weekday: string;
   timeSlotId: string;
+  classId: string;
+  room: string;
   type: string;
   requiresSubstitution: boolean;
 };
@@ -79,6 +92,11 @@ async function getTemplates() {
   return response.data;
 }
 
+async function getClasses() {
+  const response = await api.get<ClassItem[]>('/classes');
+  return response.data;
+}
+
 async function getPlanner(employeeId: string) {
   const response = await api.get<WeeklySchedule[]>(
     `/employee-weekly-schedules/employee/${employeeId}`,
@@ -96,6 +114,7 @@ export default function EmployeePlannerPage() {
   const queryClient = useQueryClient();
 
   const [selectedTemplateId, setSelectedTemplateId] = useState('');
+  const [defaultClassId, setDefaultClassId] = useState('');
   const [defaultType, setDefaultType] = useState('AULA');
   const [localCells, setLocalCells] = useState<LocalCell[]>([]);
   const [isDragging, setIsDragging] = useState(false);
@@ -109,6 +128,11 @@ export default function EmployeePlannerPage() {
   const { data: templates = [] } = useQuery({
     queryKey: ['time-templates'],
     queryFn: getTemplates,
+  });
+
+  const { data: classes = [] } = useQuery({
+    queryKey: ['classes'],
+    queryFn: getClasses,
   });
 
   const { data: planner = [], isLoading } = useQuery({
@@ -129,17 +153,45 @@ export default function EmployeePlannerPage() {
   }, [templates, selectedTemplateId]);
 
   const slots = selectedTemplate?.slots || [];
+  const availableClasses = classes.filter((item) => {
+    if (employee?.school?.id && item.school?.id !== employee.school.id) {
+      return false;
+    }
+
+    if (selectedTemplate?.id && item.template?.id !== selectedTemplate.id) {
+      return false;
+    }
+
+    return true;
+  });
+  const classById = useMemo(
+    () => new Map(classes.map((item) => [item.id, item])),
+    [classes],
+  );
 
   useEffect(() => {
     const mapped = planner.map((item) => ({
       weekday: item.weekday,
       timeSlotId: item.timeSlotId,
+      classId: item.classId ?? item.class?.id ?? '',
+      room: item.room ?? '',
       type: item.type,
       requiresSubstitution: item.requiresSubstitution ?? true,
     }));
 
     setLocalCells(mapped);
   }, [planner]);
+
+  useEffect(() => {
+    if (
+      defaultClassId &&
+      availableClasses.some((item) => item.id === defaultClassId)
+    ) {
+      return;
+    }
+
+    setDefaultClassId(availableClasses[0]?.id ?? '');
+  }, [availableClasses, defaultClassId]);
 
   const saveMutation = useMutation({
     mutationFn: savePlannerBulk,
@@ -183,11 +235,18 @@ export default function EmployeePlannerPage() {
 
     if (existing) return;
 
+    if (!defaultClassId) {
+      alert('Selecione uma turma padrao antes de marcar horarios.');
+      return;
+    }
+
     setLocalCells((prev) => [
       ...prev,
       {
         weekday,
         timeSlotId: slot.id,
+        classId: defaultClassId,
+        room: '',
         type: defaultType,
         requiresSubstitution: slot.requiresSubstitution,
       },
@@ -208,6 +267,26 @@ export default function EmployeePlannerPage() {
       prev.map((item) =>
         item.weekday === weekday && item.timeSlotId === slot.id
           ? { ...item, type }
+          : item,
+      ),
+    );
+  }
+
+  function updateCellClass(weekday: string, slot: Slot, classId: string) {
+    setLocalCells((prev) =>
+      prev.map((item) =>
+        item.weekday === weekday && item.timeSlotId === slot.id
+          ? { ...item, classId }
+          : item,
+      ),
+    );
+  }
+
+  function updateCellRoom(weekday: string, slot: Slot, room: string) {
+    setLocalCells((prev) =>
+      prev.map((item) =>
+        item.weekday === weekday && item.timeSlotId === slot.id
+          ? { ...item, room }
           : item,
       ),
     );
@@ -237,11 +316,18 @@ export default function EmployeePlannerPage() {
   function buildCellsForSlots(slotsToFill: Slot[]) {
     const newCells: LocalCell[] = [];
 
+    if (!defaultClassId) {
+      alert('Selecione uma turma padrao antes de preencher horarios.');
+      return newCells;
+    }
+
     slotsToFill.forEach((slot) => {
       WEEKDAYS.forEach((day) => {
         newCells.push({
           weekday: day.key,
           timeSlotId: slot.id,
+          classId: defaultClassId,
+          room: '',
           type: defaultType,
           requiresSubstitution: slot.requiresSubstitution,
         });
@@ -343,6 +429,11 @@ export default function EmployeePlannerPage() {
       return;
     }
 
+    if (localCells.some((cell) => !cell.classId)) {
+      alert('Todos os horarios marcados precisam estar vinculados a uma turma.');
+      return;
+    }
+
     const uniqueCells = Array.from(
       new Map(
         localCells.map((cell) => [`${cell.weekday}:${cell.timeSlotId}`, cell]),
@@ -353,9 +444,11 @@ export default function EmployeePlannerPage() {
       tenantId: TENANT_ID,
       employeeId,
       schoolId: employee.school!.id,
+      classId: cell.classId,
       timeSlotId: cell.timeSlotId,
       weekday: cell.weekday,
       type: cell.type,
+      room: cell.room || null,
       requiresSubstitution: cell.requiresSubstitution,
     }));
 
@@ -432,6 +525,22 @@ export default function EmployeePlannerPage() {
           </div>
 
           <div>
+            <label className="text-sm font-medium">Turma padrao</label>
+            <select
+              value={defaultClassId}
+              onChange={(e) => setDefaultClassId(e.target.value)}
+              className="mt-1 w-full border rounded-xl px-3 py-2 text-sm"
+            >
+              <option value="">Selecione</option>
+              {availableClasses.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
             <label className="text-sm font-medium">Tipo padrão ao marcar</label>
             <select
               value={defaultType}
@@ -501,25 +610,59 @@ export default function EmployeePlannerPage() {
                               }`}
                             >
                               {active
-                                ? TYPES.find((type) => type.value === cell?.type)?.label ||
-                                  cell?.type
+                                ? [
+                                    TYPES.find((type) => type.value === cell?.type)?.label ||
+                                      cell?.type,
+                                    cell?.classId
+                                      ? classById.get(cell.classId)?.name
+                                      : null,
+                                    cell?.room ? `Sala ${cell.room}` : null,
+                                  ]
+                                    .filter(Boolean)
+                                    .join(' - ')
                                 : 'Livre'}
                             </button>
 
                             {active && (
-                              <select
-                                value={cell?.type}
-                                onChange={(e) =>
-                                  updateCellType(day.key, slot, e.target.value)
-                                }
-                                className="w-full border rounded-lg px-1 py-1 text-[10px]"
-                              >
-                                {TYPES.map((type) => (
-                                  <option key={type.value} value={type.value}>
-                                    {type.label}
-                                  </option>
-                                ))}
-                              </select>
+                              <>
+                                <select
+                                  value={cell?.classId}
+                                  onChange={(e) =>
+                                    updateCellClass(day.key, slot, e.target.value)
+                                  }
+                                  className="w-full border rounded-lg px-1 py-1 text-[10px]"
+                                >
+                                  <option value="">Turma</option>
+                                  {availableClasses.map((item) => (
+                                    <option key={item.id} value={item.id}>
+                                      {item.name}
+                                    </option>
+                                  ))}
+                                </select>
+
+                                <select
+                                  value={cell?.type}
+                                  onChange={(e) =>
+                                    updateCellType(day.key, slot, e.target.value)
+                                  }
+                                  className="w-full border rounded-lg px-1 py-1 text-[10px]"
+                                >
+                                  {TYPES.map((type) => (
+                                    <option key={type.value} value={type.value}>
+                                      {type.label}
+                                    </option>
+                                  ))}
+                                </select>
+
+                                <input
+                                  value={cell?.room ?? ''}
+                                  onChange={(e) =>
+                                    updateCellRoom(day.key, slot, e.target.value)
+                                  }
+                                  className="w-full border rounded-lg px-1 py-1 text-[10px]"
+                                  placeholder="Sala"
+                                />
+                              </>
                             )}
                           </div>
                         </td>
@@ -543,3 +686,4 @@ export default function EmployeePlannerPage() {
     </section>
   );
 }
+
