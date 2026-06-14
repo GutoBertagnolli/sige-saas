@@ -130,22 +130,22 @@ export default function EmployeePlannerPage() {
   const [isDragging, setIsDragging] = useState(false);
   const [dragMode, setDragMode] = useState<'add' | 'remove'>('add');
 
-  const { data: employees = [] } = useQuery({
+  const { data: employees = [] } = useQuery<Employee[]>({
     queryKey: ['employees'],
     queryFn: getEmployees,
   });
 
-  const { data: templates = [] } = useQuery({
+  const { data: templates = [] } = useQuery<TimeTemplate[]>({
     queryKey: ['time-templates'],
     queryFn: getTemplates,
   });
 
-  const { data: classes = [] } = useQuery({
+  const { data: classes = [] } = useQuery<ClassItem[]>({
     queryKey: ['classes'],
     queryFn: getClasses,
   });
 
-  const { data: planner = [], isLoading } = useQuery({
+  const { data: planner = [], isLoading } = useQuery<WeeklySchedule[]>({
     queryKey: ['employee-planner', employeeId],
     queryFn: () => getPlanner(employeeId),
     enabled: Boolean(employeeId),
@@ -175,8 +175,8 @@ export default function EmployeePlannerPage() {
 
     return true;
   });
-  const classById = useMemo(
-    () => new Map(classes.map((item) => [item.id, item])),
+  const classById = useMemo<Map<string, ClassItem>>(
+    () => new Map(classes.map((item: ClassItem) => [item.id, item])),
     [classes],
   );
 
