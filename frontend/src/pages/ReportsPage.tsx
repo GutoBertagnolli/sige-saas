@@ -104,11 +104,19 @@ function formatType(type?: string) {
 }
 
 function getScheduleKey(schedule: WeeklySchedule) {
+  if (schedule.timeSlot) {
+    return `${schedule.weekday}:${getSlotTimeKey(schedule.timeSlot)}`;
+  }
+
   return `${schedule.weekday}:${schedule.timeSlotId}`;
 }
 
 function getSlotLabel(slot: TimeSlot) {
   return `${slot.startTime} - ${slot.endTime}`;
+}
+
+function getSlotTimeKey(slot: TimeSlot) {
+  return `${slot.startTime}-${slot.endTime}`;
 }
 
 function getTimeMinutes(time: string) {
@@ -134,7 +142,7 @@ function formatMinutes(totalMinutes: number) {
 
 function getSlotSortValue(slot?: TimeSlot | null) {
   if (!slot) return 9999;
-  return slot.slotOrder ?? Number(slot.startTime.replace(':', ''));
+  return getTimeMinutes(slot.startTime) * 10000 + getTimeMinutes(slot.endTime);
 }
 
 function getEmployeeSubject(employee: Employee) {
@@ -146,7 +154,7 @@ function buildPlannerRows(schedules: WeeklySchedule[]) {
 
   schedules.forEach((schedule) => {
     if (schedule.timeSlot) {
-      slotsById.set(schedule.timeSlot.id, schedule.timeSlot);
+      slotsById.set(getSlotTimeKey(schedule.timeSlot), schedule.timeSlot);
     }
   });
 
@@ -212,7 +220,7 @@ function PlannerTable({ planner }: { planner: EmployeePlanner }) {
                   </td>
 
                   {WEEKDAYS.map((day) => {
-                    const schedule = scheduleByKey.get(`${day.key}:${slot.id}`);
+                    const schedule = scheduleByKey.get(`${day.key}:${getSlotTimeKey(slot)}`);
                     const typeStyle =
                       TYPE_STYLES[schedule?.type ?? ''] ??
                       'border-slate-200 bg-white text-slate-500';
