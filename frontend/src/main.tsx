@@ -13,6 +13,7 @@ import SchoolsPage from './pages/SchoolsPage';
 import SettingsPage from './pages/SettingsPage';
 import AnnouncementsPage from './pages/AnnouncementsPage';
 import PortalPage from './pages/PortalPage';
+import ReportsPage from './pages/ReportsPage';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import {
@@ -371,7 +372,7 @@ function Layout({
           <Route path="/servidores" element={<EmployeesPage />} />
 	  <Route path="/afastamentos" element={<AbsencesPage />} />          
           <Route path="/substituicoes" element={<SubstitutionsPage />} />
-          <Route path="/relatorios" element={<SimplePage title="Relatórios" />} />
+          <Route path="/relatorios" element={<ReportsPage />} />
           <Route path="/configuracoes" element={<SettingsPage />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
@@ -1202,5 +1203,4 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     </BrowserRouter>
   </QueryClientProvider>
 </React.StrictMode>
-
 );
