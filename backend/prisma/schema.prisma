@@ -168,6 +168,7 @@ model Subject {
   active   Boolean @default(true)
 
   schedules ClassSchedule[]
+  assignments EmployeeAssignment[]
 }
 
 model EmployeeFunction {
@@ -214,6 +215,7 @@ model EmployeeAssignment {
   functionId    String
   function      EmployeeFunction @relation(fields: [functionId], references: [id])
   subjectId     String?
+  subject       Subject?         @relation(fields: [subjectId], references: [id])
   weeklyMinutes Int              @default(0)
   active        Boolean          @default(true)
 }

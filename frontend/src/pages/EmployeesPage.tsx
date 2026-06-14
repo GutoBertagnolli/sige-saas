@@ -8,6 +8,16 @@ type School = {
   name: string;
 };
 
+type Assignment = {
+  function?: {
+    name: string;
+  } | null;
+  subject?: {
+    id: string;
+    name: string;
+  } | null;
+};
+
 type Employee = {
   id: string;
   name: string;
@@ -19,6 +29,7 @@ type Employee = {
   initialPassword?: string | null;
   active: boolean;
   school?: School | null;
+  assignments?: Assignment[];
   user?: {
     email: string;
     role?: {
@@ -47,6 +58,7 @@ async function saveEmployee(data: {
   phone?: string;
   schoolId?: string;
   roleType?: string;
+  subjectName?: string;
 }) {
   if (data.id) {
     const response = await api.put(`/employees/${data.id}`, data);
@@ -71,6 +83,10 @@ async function generateEmployeeAccess(id: string) {
   return response.data;
 }
 
+function getEmployeeSubject(employee: Employee) {
+  return employee.assignments?.find((assignment) => assignment.subject)?.subject?.name ?? '';
+}
+
 export default function EmployeesPage() {
   const queryClient = useQueryClient();
 
@@ -83,6 +99,7 @@ export default function EmployeesPage() {
   const [phone, setPhone] = useState('');
   const [schoolId, setSchoolId] = useState('');
   const [roleType, setRoleType] = useState('PROFESSOR');
+  const [subjectName, setSubjectName] = useState('');
   const [search, setSearch] = useState('');
   const [createdCredentials, setCreatedCredentials] = useState<Employee | null>(null);
 
@@ -144,6 +161,7 @@ export default function EmployeesPage() {
     setPhone('');
     setSchoolId('');
     setRoleType('PROFESSOR');
+    setSubjectName('');
     setModalOpen(true);
   }
 
@@ -155,6 +173,7 @@ export default function EmployeesPage() {
     setPhone(employee.phone || '');
     setSchoolId(employee.school?.id || '');
     setRoleType(employee.roleType || 'PROFESSOR');    
+    setSubjectName(getEmployeeSubject(employee));
     setModalOpen(true);
   }
 
@@ -167,6 +186,7 @@ export default function EmployeesPage() {
     setPhone('');
     setSchoolId('');
     setRoleType('PROFESSOR');  
+    setSubjectName('');
 }
 
   function handleSave() {
@@ -183,6 +203,7 @@ export default function EmployeesPage() {
       phone,
       roleType,
       schoolId: schoolId || undefined,
+      subjectName: subjectName.trim(),
     });
   }
 
@@ -256,6 +277,7 @@ export default function EmployeesPage() {
                   <th className="text-left py-3">CPF</th>
                   <th className="text-left py-3">Escola</th>
                   <th className="text-left py-3">Função</th>
+                  <th className="text-left py-3">MatÃ©ria</th>
                   <th className="text-left py-3">Telefone</th>
                   <th className="text-left py-3">E-mail</th>
                   <th className="text-left py-3">Login</th>
@@ -273,6 +295,7 @@ export default function EmployeesPage() {
                     <td className="py-3">
 		    {employee.roleType === 'SERVICOS_GERAIS' ? 'Serviços Gerais' : employee.roleType?.replace(/_/g, ' ') || 'PROFESSOR'}
 </td>
+                    <td className="py-3">{getEmployeeSubject(employee) || '-'}</td>
                     <td className="py-3">{employee.phone || '-'}</td>
                     <td className="py-3">{employee.email || '-'}</td>
                     <td className="py-3">{employee.loginEmail || employee.user?.email || '-'}</td>
@@ -316,7 +339,7 @@ export default function EmployeesPage() {
 
                 {filteredEmployees.length === 0 && (
                   <tr>
-                    <td colSpan={9} className="py-6 text-center text-slate-500">
+                    <td colSpan={10} className="py-6 text-center text-slate-500">
                       Nenhum servidor encontrado.
                     </td>
                   </tr>
@@ -394,6 +417,15 @@ export default function EmployeesPage() {
                     </option>
                   ))}
                 </select>
+              </div>
+              <div>
+                <label className="text-sm font-medium">MatÃ©ria lecionada</label>
+                <input
+                  value={subjectName}
+                  onChange={(e) => setSubjectName(e.target.value)}
+                  className="mt-1 w-full border rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-300"
+                  placeholder="Ex.: MatemÃ¡tica"
+                />
               </div>
 	      <div>
   <label className="text-sm font-medium">Função / Cargo</label>

@@ -84,6 +84,7 @@ export class EmployeeWeeklySchedulesService {
           create: {
             tenantId: item.tenantId,
             classId: item.classId,
+            subjectId: item.subjectId || null,
             weekday: item.weekday,
             timeSlotId: item.timeSlotId,
             teacherId: employeeId,
@@ -92,6 +93,7 @@ export class EmployeeWeeklySchedulesService {
             isActive: true,
           },
           update: {
+            subjectId: item.subjectId || null,
             teacherId: employeeId,
             room: item.room || null,
             notes: item.notes || null,

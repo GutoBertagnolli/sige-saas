@@ -138,14 +138,111 @@ export class EmployeesService {
     });
   }
 
+  private async findOrCreateTeacherFunction(
+    tenantId: string,
+    client: Pick<PrismaService, 'employeeFunction'> = this.prisma,
+  ) {
+    const existing = await client.employeeFunction.findFirst({
+      where: {
+        tenantId,
+        name: 'Professor',
+      },
+    });
+
+    if (existing) {
+      return existing;
+    }
+
+    return client.employeeFunction.create({
+      data: {
+        tenantId,
+        name: 'Professor',
+        requiresSubject: true,
+      },
+    });
+  }
+
+  private async findOrCreateSubject(
+    tenantId: string,
+    subjectName?: string | null,
+    client: Pick<PrismaService, 'subject'> = this.prisma,
+  ) {
+    const name = subjectName?.trim();
+
+    if (!name) {
+      return null;
+    }
+
+    const existing = await client.subject.findFirst({
+      where: {
+        tenantId,
+        name,
+      },
+    });
+
+    if (existing) {
+      return existing;
+    }
+
+    return client.subject.create({
+      data: {
+        tenantId,
+        name,
+      },
+    });
+  }
+
+  private async replaceTeacherSubjectAssignment(
+    employeeId: string,
+    tenantId: string,
+    schoolId?: string | null,
+    subjectName?: string | null,
+    client: Pick<
+      PrismaService,
+      'employeeAssignment' | 'employeeFunction' | 'subject'
+    > = this.prisma,
+  ) {
+    await client.employeeAssignment.updateMany({
+      where: {
+        employeeId,
+        active: true,
+      },
+      data: {
+        active: false,
+      },
+    });
+
+    const subject = await this.findOrCreateSubject(tenantId, subjectName, client);
+
+    if (!subject || !schoolId) {
+      return null;
+    }
+
+    const teacherFunction = await this.findOrCreateTeacherFunction(tenantId, client);
+
+    return client.employeeAssignment.create({
+      data: {
+        employeeId,
+        schoolId,
+        functionId: teacherFunction.id,
+        subjectId: subject.id,
+        active: true,
+      },
+    });
+  }
+
   findAll() {
     return this.prisma.employee.findMany({
       where: { active: true },
       include: {
         school: true,
         assignments: {
+          where: {
+            active: true,
+          },
           include: {
             function: true,
+            subject: true,
           },
         },
         user: {
@@ -170,6 +267,7 @@ export class EmployeesService {
     phone?: string;
     photoUrl?: string;
     roleType?: string;
+    subjectName?: string;
   }) {
     const tenantId = await this.resolveTenantId(data.tenantId);
     const roleType = this.normalizeRoleType(data.roleType);
@@ -193,7 +291,7 @@ export class EmployeesService {
         },
       });
 
-      return transaction.employee.create({
+      const createdEmployee = await transaction.employee.create({
         data: {
           tenantId: tenantId!,
           schoolId: data.schoolId || null,
@@ -210,6 +308,46 @@ export class EmployeesService {
         },
         include: {
           school: true,
+          assignments: {
+            where: {
+              active: true,
+            },
+            include: {
+              function: true,
+              subject: true,
+            },
+          },
+          user: {
+            include: {
+              role: true,
+            },
+          },
+        },
+      });
+
+      await this.replaceTeacherSubjectAssignment(
+        createdEmployee.id,
+        tenantId!,
+        data.schoolId || null,
+        data.subjectName,
+        transaction,
+      );
+
+      return transaction.employee.findUnique({
+        where: {
+          id: createdEmployee.id,
+        },
+        include: {
+          school: true,
+          assignments: {
+            where: {
+              active: true,
+            },
+            include: {
+              function: true,
+              subject: true,
+            },
+          },
           user: {
             include: {
               role: true,
@@ -221,14 +359,24 @@ export class EmployeesService {
   }
 
   async update(id: string, data: any) {
-    if (data.roleType) {
-      data.roleType = this.normalizeRoleType(data.roleType);
+    const { subjectName, ...employeeData } = data;
+
+    if (employeeData.roleType) {
+      employeeData.roleType = this.normalizeRoleType(employeeData.roleType);
     }
 
     const employee = await this.prisma.employee.findUnique({
       where: { id },
       include: {
         school: true,
+        assignments: {
+          where: {
+            active: true,
+          },
+          include: {
+            subject: true,
+          },
+        },
         user: {
           include: {
             role: true,
@@ -243,9 +391,18 @@ export class EmployeesService {
 
     const updatedEmployee = await this.prisma.employee.update({
       where: { id },
-      data,
+      data: employeeData,
       include: {
         school: true,
+        assignments: {
+          where: {
+            active: true,
+          },
+          include: {
+            function: true,
+            subject: true,
+          },
+        },
         user: {
           include: {
             role: true,
@@ -254,8 +411,22 @@ export class EmployeesService {
       },
     });
 
-    if (employee.userId && data.roleType) {
-      const role = await this.findOrCreateRole(employee.tenantId, data.roleType);
+    if (subjectName !== undefined || employeeData.schoolId !== undefined) {
+      const nextSubjectName =
+        subjectName !== undefined
+          ? subjectName
+          : employee.assignments[0]?.subject?.name ?? null;
+
+      await this.replaceTeacherSubjectAssignment(
+        id,
+        employee.tenantId,
+        employeeData.schoolId ?? updatedEmployee.schoolId,
+        nextSubjectName,
+      );
+    }
+
+    if (employee.userId && employeeData.roleType) {
+      const role = await this.findOrCreateRole(employee.tenantId, employeeData.roleType);
 
       await this.prisma.user.update({
         where: {
@@ -270,6 +441,15 @@ export class EmployeesService {
         where: { id },
         include: {
           school: true,
+          assignments: {
+            where: {
+              active: true,
+            },
+            include: {
+              function: true,
+              subject: true,
+            },
+          },
           user: {
             include: {
               role: true,
@@ -279,7 +459,26 @@ export class EmployeesService {
       });
     }
 
-    return updatedEmployee;
+    return this.prisma.employee.findUnique({
+      where: { id },
+      include: {
+        school: true,
+        assignments: {
+          where: {
+            active: true,
+          },
+          include: {
+            function: true,
+            subject: true,
+          },
+        },
+        user: {
+          include: {
+            role: true,
+          },
+        },
+      },
+    });
   }
 
   async generateAccess(id: string) {

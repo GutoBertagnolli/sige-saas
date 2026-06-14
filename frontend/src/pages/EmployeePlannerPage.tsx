@@ -7,6 +7,10 @@ type Employee = {
   id: string;
   name: string;
   school?: { id: string; name: string } | null;
+  assignments?: Array<{
+    subject?: { id: string; name: string } | null;
+    function?: { name: string } | null;
+  }>;
 };
 
 type Slot = {
@@ -42,6 +46,7 @@ type WeeklySchedule = {
   classId?: string | null;
   class?: { id: string; name: string } | null;
   room?: string | null;
+  subject?: string | null;
   requiresSubstitution?: boolean;
 };
 
@@ -51,6 +56,7 @@ type LocalCell = {
   classId: string;
   room: string;
   type: string;
+  subject: string;
   requiresSubstitution: boolean;
 };
 
@@ -81,6 +87,10 @@ const TYPE_COLORS: Record<string, string> = {
   ALMOCO_SONO: 'bg-green-600 text-white border-green-700',
   ADMINISTRATIVO: 'bg-slate-700 text-white border-slate-800',
 };
+
+function getEmployeeSubject(employee?: Employee) {
+  return employee?.assignments?.find((assignment) => assignment.subject)?.subject ?? null;
+}
 
 async function getEmployees() {
   const response = await api.get<Employee[]>('/employees');
@@ -142,6 +152,7 @@ export default function EmployeePlannerPage() {
   });
 
   const employee = employees.find((item) => item.id === employeeId);
+  const employeeSubject = getEmployeeSubject(employee);
 
   const selectedTemplate = useMemo(() => {
     if (selectedTemplateId) {
@@ -176,11 +187,12 @@ export default function EmployeePlannerPage() {
       classId: item.classId ?? item.class?.id ?? '',
       room: item.room ?? '',
       type: item.type,
+      subject: item.subject ?? employeeSubject?.name ?? '',
       requiresSubstitution: item.requiresSubstitution ?? true,
     }));
 
     setLocalCells(mapped);
-  }, [planner]);
+  }, [planner, employeeSubject?.name]);
 
   useEffect(() => {
     if (
@@ -248,6 +260,7 @@ export default function EmployeePlannerPage() {
         classId: defaultClassId,
         room: '',
         type: defaultType,
+        subject: employeeSubject?.name ?? '',
         requiresSubstitution: slot.requiresSubstitution,
       },
     ]);
@@ -329,6 +342,7 @@ export default function EmployeePlannerPage() {
           classId: defaultClassId,
           room: '',
           type: defaultType,
+          subject: employeeSubject?.name ?? '',
           requiresSubstitution: slot.requiresSubstitution,
         });
       });
@@ -448,6 +462,9 @@ export default function EmployeePlannerPage() {
       timeSlotId: cell.timeSlotId,
       weekday: cell.weekday,
       type: cell.type,
+      subjectId: employeeSubject?.id ?? null,
+      subject: cell.subject || employeeSubject?.name || null,
+      functionName: cell.type === 'AULA' ? 'Professor' : cell.type,
       room: cell.room || null,
       requiresSubstitution: cell.requiresSubstitution,
     }));
@@ -470,7 +487,8 @@ export default function EmployeePlannerPage() {
             <h2 className="text-lg font-semibold">Planner semanal</h2>
             <p className="text-sm text-slate-500">
               {employee?.name || 'Servidor'} •{' '}
-              {employee?.school?.name || 'Sem escola vinculada'}
+              {employee?.school?.name || 'Sem escola vinculada'} •{' '}
+              {employeeSubject?.name || 'Sem matÃ©ria cadastrada'}
             </p>
           </div>
 
@@ -616,6 +634,7 @@ export default function EmployeePlannerPage() {
                                     cell?.classId
                                       ? classById.get(cell.classId)?.name
                                       : null,
+                                    cell?.subject || employeeSubject?.name || null,
                                     cell?.room ? `Sala ${cell.room}` : null,
                                   ]
                                     .filter(Boolean)

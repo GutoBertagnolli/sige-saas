@@ -11,6 +11,12 @@ type Employee = {
     id: string;
     name: string;
   } | null;
+  assignments?: Array<{
+    subject?: {
+      id: string;
+      name: string;
+    } | null;
+  }>;
 };
 
 type TimeSlot = {
@@ -27,6 +33,7 @@ type WeeklySchedule = {
   type: string;
   timeSlotId: string;
   room?: string | null;
+  subject?: string | null;
   class?: {
     id: string;
     name: string;
@@ -104,9 +111,34 @@ function getSlotLabel(slot: TimeSlot) {
   return `${slot.startTime} - ${slot.endTime}`;
 }
 
+function getTimeMinutes(time: string) {
+  const [hours = '0', minutes = '0'] = time.split(':');
+  return Number(hours) * 60 + Number(minutes);
+}
+
+function getSlotDuration(slot?: TimeSlot | null) {
+  if (!slot) return 0;
+  return Math.max(0, getTimeMinutes(slot.endTime) - getTimeMinutes(slot.startTime));
+}
+
+function formatMinutes(totalMinutes: number) {
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+
+  if (minutes === 0) {
+    return `${hours}h`;
+  }
+
+  return `${hours}h${String(minutes).padStart(2, '0')}`;
+}
+
 function getSlotSortValue(slot?: TimeSlot | null) {
   if (!slot) return 9999;
   return slot.slotOrder ?? Number(slot.startTime.replace(':', ''));
+}
+
+function getEmployeeSubject(employee: Employee) {
+  return employee.assignments?.find((assignment) => assignment.subject)?.subject?.name ?? '';
 }
 
 function buildPlannerRows(schedules: WeeklySchedule[]) {
@@ -200,6 +232,9 @@ function PlannerTable({ planner }: { planner: EmployeePlanner }) {
                             <div className="mt-1 text-[11px]">
                               {schedule.class?.name ?? 'Turma nao informada'}
                             </div>
+                            <div className="mt-1 text-[11px]">
+                              {schedule.subject || getEmployeeSubject(planner.employee) || 'Materia nao informada'}
+                            </div>
                             {schedule.room && (
                               <div className="mt-1 text-[11px]">
                                 Sala {schedule.room}
@@ -276,6 +311,45 @@ export default function ReportsPage() {
     if (employeeId && planner.employee.id !== employeeId) return false;
     return true;
   });
+
+  const summaryRows = useMemo(() => {
+    const rowsByKey = new Map<
+      string,
+      {
+        employeeName: string;
+        schoolName: string;
+        subject: string;
+        totalMinutes: number;
+        scheduleCount: number;
+      }
+    >();
+
+    filteredPlanners.forEach((planner) => {
+      const defaultSubject = getEmployeeSubject(planner.employee) || 'Materia nao informada';
+
+      planner.schedules.forEach((schedule) => {
+        const subject = schedule.subject || defaultSubject;
+        const key = `${planner.employee.id}:${subject}`;
+        const current =
+          rowsByKey.get(key) ??
+          {
+            employeeName: planner.employee.name,
+            schoolName: planner.employee.school?.name ?? 'Sem escola vinculada',
+            subject,
+            totalMinutes: 0,
+            scheduleCount: 0,
+          };
+
+        current.totalMinutes += getSlotDuration(schedule.timeSlot);
+        current.scheduleCount += 1;
+        rowsByKey.set(key, current);
+      });
+    });
+
+    return Array.from(rowsByKey.values()).sort((a, b) =>
+      a.employeeName.localeCompare(b.employeeName) || a.subject.localeCompare(b.subject),
+    );
+  }, [filteredPlanners]);
 
   const loading = loadingEmployees || loadingPlanners;
 
@@ -361,6 +435,49 @@ export default function ReportsPage() {
         </div>
       ) : filteredPlanners.length > 0 ? (
         <div className="grid gap-5">
+          <section className="rounded-lg border bg-white shadow-sm print:shadow-none">
+            <div className="border-b px-4 py-3">
+              <h2 className="text-base font-semibold text-slate-950">
+                Professor x horas x materia
+              </h2>
+            </div>
+
+            <div className="overflow-auto">
+              <table className="w-full min-w-[760px] border-collapse text-xs">
+                <thead>
+                  <tr className="bg-slate-100 text-left text-slate-700">
+                    <th className="border-b px-3 py-2">Professor</th>
+                    <th className="border-b px-3 py-2">Escola</th>
+                    <th className="border-b px-3 py-2">Materia</th>
+                    <th className="border-b px-3 py-2 text-right">Horarios</th>
+                    <th className="border-b px-3 py-2 text-right">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {summaryRows.map((row) => (
+                    <tr key={`${row.employeeName}:${row.subject}`} className="border-b last:border-b-0">
+                      <td className="px-3 py-2 font-medium text-slate-950">
+                        {row.employeeName}
+                      </td>
+                      <td className="px-3 py-2 text-slate-600">{row.schoolName}</td>
+                      <td className="px-3 py-2">
+                        <span className="rounded-md border border-blue-200 bg-blue-50 px-2 py-1 font-medium text-blue-950">
+                          {row.subject}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 text-right text-slate-600">
+                        {row.scheduleCount}
+                      </td>
+                      <td className="px-3 py-2 text-right font-semibold text-slate-950">
+                        {formatMinutes(row.totalMinutes)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+
           {filteredPlanners.map((planner) => (
             <PlannerTable key={planner.employee.id} planner={planner} />
           ))}
