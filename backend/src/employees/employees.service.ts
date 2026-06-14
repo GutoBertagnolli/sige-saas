@@ -192,11 +192,30 @@ export class EmployeesService {
     });
   }
 
+  private async findSubjectById(
+    tenantId: string,
+    subjectId?: string | null,
+    client: Pick<PrismaService, 'subject'> = this.prisma,
+  ) {
+    if (!subjectId) {
+      return null;
+    }
+
+    return client.subject.findFirst({
+      where: {
+        id: subjectId,
+        tenantId,
+        active: true,
+      },
+    });
+  }
+
   private async replaceTeacherSubjectAssignment(
     employeeId: string,
     tenantId: string,
     schoolId?: string | null,
     subjectName?: string | null,
+    subjectId?: string | null,
     client: Pick<
       PrismaService,
       'employeeAssignment' | 'employeeFunction' | 'subject'
@@ -212,7 +231,9 @@ export class EmployeesService {
       },
     });
 
-    const subject = await this.findOrCreateSubject(tenantId, subjectName, client);
+    const subject =
+      (await this.findSubjectById(tenantId, subjectId, client)) ||
+      (await this.findOrCreateSubject(tenantId, subjectName, client));
 
     if (!subject || !schoolId) {
       return null;
@@ -268,6 +289,7 @@ export class EmployeesService {
     photoUrl?: string;
     roleType?: string;
     subjectName?: string;
+    subjectId?: string;
   }) {
     const tenantId = await this.resolveTenantId(data.tenantId);
     const roleType = this.normalizeRoleType(data.roleType);
@@ -330,6 +352,7 @@ export class EmployeesService {
         tenantId!,
         data.schoolId || null,
         data.subjectName,
+        data.subjectId,
         transaction,
       );
 
@@ -359,7 +382,7 @@ export class EmployeesService {
   }
 
   async update(id: string, data: any) {
-    const { subjectName, ...employeeData } = data;
+    const { subjectName, subjectId, ...employeeData } = data;
 
     if (employeeData.roleType) {
       employeeData.roleType = this.normalizeRoleType(employeeData.roleType);
@@ -411,17 +434,22 @@ export class EmployeesService {
       },
     });
 
-    if (subjectName !== undefined || employeeData.schoolId !== undefined) {
+    if (subjectName !== undefined || subjectId !== undefined || employeeData.schoolId !== undefined) {
       const nextSubjectName =
         subjectName !== undefined
           ? subjectName
           : employee.assignments[0]?.subject?.name ?? null;
+      const nextSubjectId =
+        subjectId !== undefined
+          ? subjectId
+          : employee.assignments[0]?.subject?.id ?? null;
 
       await this.replaceTeacherSubjectAssignment(
         id,
         employee.tenantId,
         employeeData.schoolId ?? updatedEmployee.schoolId,
         nextSubjectName,
+        nextSubjectId,
       );
     }
 

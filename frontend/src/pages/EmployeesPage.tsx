@@ -8,6 +8,12 @@ type School = {
   name: string;
 };
 
+type Subject = {
+  id: string;
+  name: string;
+  color?: string | null;
+};
+
 type Assignment = {
   function?: {
     name: string;
@@ -50,6 +56,11 @@ async function getSchools() {
   return response.data;
 }
 
+async function getSubjects() {
+  const response = await api.get<Subject[]>('/subjects');
+  return response.data;
+}
+
 async function saveEmployee(data: {
   id?: string;
   name: string;
@@ -59,6 +70,7 @@ async function saveEmployee(data: {
   schoolId?: string;
   roleType?: string;
   subjectName?: string;
+  subjectId?: string;
 }) {
   if (data.id) {
     const response = await api.put(`/employees/${data.id}`, data);
@@ -87,6 +99,10 @@ function getEmployeeSubject(employee: Employee) {
   return employee.assignments?.find((assignment) => assignment.subject)?.subject?.name ?? '';
 }
 
+function getEmployeeSubjectId(employee: Employee) {
+  return employee.assignments?.find((assignment) => assignment.subject)?.subject?.id ?? '';
+}
+
 export default function EmployeesPage() {
   const queryClient = useQueryClient();
 
@@ -99,7 +115,7 @@ export default function EmployeesPage() {
   const [phone, setPhone] = useState('');
   const [schoolId, setSchoolId] = useState('');
   const [roleType, setRoleType] = useState('PROFESSOR');
-  const [subjectName, setSubjectName] = useState('');
+  const [subjectId, setSubjectId] = useState('');
   const [search, setSearch] = useState('');
   const [createdCredentials, setCreatedCredentials] = useState<Employee | null>(null);
 
@@ -111,6 +127,11 @@ export default function EmployeesPage() {
   const { data: schools = [] } = useQuery({
     queryKey: ['schools'],
     queryFn: getSchools,
+  });
+
+  const { data: subjects = [] } = useQuery({
+    queryKey: ['subjects'],
+    queryFn: getSubjects,
   });
 
   const saveMutation = useMutation({
@@ -161,7 +182,7 @@ export default function EmployeesPage() {
     setPhone('');
     setSchoolId('');
     setRoleType('PROFESSOR');
-    setSubjectName('');
+    setSubjectId('');
     setModalOpen(true);
   }
 
@@ -173,7 +194,7 @@ export default function EmployeesPage() {
     setPhone(employee.phone || '');
     setSchoolId(employee.school?.id || '');
     setRoleType(employee.roleType || 'PROFESSOR');    
-    setSubjectName(getEmployeeSubject(employee));
+    setSubjectId(getEmployeeSubjectId(employee));
     setModalOpen(true);
   }
 
@@ -186,7 +207,7 @@ export default function EmployeesPage() {
     setPhone('');
     setSchoolId('');
     setRoleType('PROFESSOR');  
-    setSubjectName('');
+    setSubjectId('');
 }
 
   function handleSave() {
@@ -203,7 +224,8 @@ export default function EmployeesPage() {
       phone,
       roleType,
       schoolId: schoolId || undefined,
-      subjectName: subjectName.trim(),
+      subjectId: subjectId || '',
+      subjectName: subjects.find((subject) => subject.id === subjectId)?.name ?? '',
     });
   }
 
@@ -277,7 +299,7 @@ export default function EmployeesPage() {
                   <th className="text-left py-3">CPF</th>
                   <th className="text-left py-3">Escola</th>
                   <th className="text-left py-3">Função</th>
-                  <th className="text-left py-3">MatÃ©ria</th>
+                  <th className="text-left py-3">Matéria</th>
                   <th className="text-left py-3">Telefone</th>
                   <th className="text-left py-3">E-mail</th>
                   <th className="text-left py-3">Login</th>
@@ -419,13 +441,19 @@ export default function EmployeesPage() {
                 </select>
               </div>
               <div>
-                <label className="text-sm font-medium">MatÃ©ria lecionada</label>
-                <input
-                  value={subjectName}
-                  onChange={(e) => setSubjectName(e.target.value)}
+                <label className="text-sm font-medium">Matéria lecionada</label>
+                <select
+                  value={subjectId}
+                  onChange={(e) => setSubjectId(e.target.value)}
                   className="mt-1 w-full border rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-300"
-                  placeholder="Ex.: MatemÃ¡tica"
-                />
+                >
+                  <option value="">Selecione</option>
+                  {subjects.map((subject) => (
+                    <option key={subject.id} value={subject.id}>
+                      {subject.name}
+                    </option>
+                  ))}
+                </select>
               </div>
 	      <div>
   <label className="text-sm font-medium">Função / Cargo</label>

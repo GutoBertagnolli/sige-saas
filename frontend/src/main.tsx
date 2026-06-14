@@ -14,6 +14,7 @@ import SettingsPage from './pages/SettingsPage';
 import AnnouncementsPage from './pages/AnnouncementsPage';
 import PortalPage from './pages/PortalPage';
 import ReportsPage from './pages/ReportsPage';
+import SubjectsPage from './pages/SubjectsPage';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import {
@@ -52,6 +53,7 @@ const menu = [
   { label: 'Escolas', path: '/escolas' },
   { label: 'Turmas', path: '/turmas' },
   { label: 'Horários', path: '/horarios' },
+  { label: 'Matérias', path: '/materias' },
   { label: 'Servidores', path: '/servidores' },
   { label: 'Afastamentos', path: '/afastamentos' },
   { label: 'Substituições', path: '/substituicoes' },
@@ -369,6 +371,7 @@ function Layout({
   	  <Route path="/escolas" element={<SchoolsPage />} />          
           <Route path="/turmas" element={<ClassesPage />} />
           <Route path="/horarios" element={<TimeTemplatesPage />} />
+          <Route path="/materias" element={<SubjectsPage />} />
           <Route path="/servidores" element={<EmployeesPage />} />
 	  <Route path="/afastamentos" element={<AbsencesPage />} />          
           <Route path="/substituicoes" element={<SubstitutionsPage />} />

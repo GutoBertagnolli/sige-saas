@@ -14,6 +14,7 @@ import { SchoolsModule } from './schools/schools.module';
 import { TimeTemplatesModule } from './time-templates/time-templates.module';
 import { SettingsModule } from './settings/settings.module';
 import { AnnouncementsModule } from './announcements/announcements.module';
+import { SubjectsModule } from './subjects/subjects.module';
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { AnnouncementsModule } from './announcements/announcements.module';
     UsersModule,
     SchoolsModule,
     SettingsModule,
+    SubjectsModule,
     TimeTemplatesModule,
     EmployeesModule,
   ],
