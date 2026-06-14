@@ -30,23 +30,81 @@ export class EmployeeWeeklySchedulesService {
   }
 
   async bulkReplace(employeeId: string, items: any[]) {
-  await this.prisma.employeeWeeklySchedule.updateMany({
-    where: {
-      employeeId,
-    },
-    data: {
-      active: false,
-    },
-  });
+    return this.prisma.$transaction(async (transaction) => {
+      await transaction.employeeWeeklySchedule.updateMany({
+        where: {
+          employeeId,
+        },
+        data: {
+          active: false,
+        },
+      });
 
-  if (items.length === 0) {
-    return [];
+      await transaction.classSchedule.updateMany({
+        where: {
+          teacherId: employeeId,
+        },
+        data: {
+          teacherId: null,
+          isActive: false,
+        },
+      });
+
+      if (items.length === 0) {
+        return [];
+      }
+
+      await transaction.employeeWeeklySchedule.createMany({
+        data: items.map((item) => ({
+          tenantId: item.tenantId,
+          employeeId,
+          schoolId: item.schoolId,
+          classId: item.classId || null,
+          timeSlotId: item.timeSlotId,
+          weekday: item.weekday,
+          type: item.type ?? 'AULA',
+          subject: item.subject ?? null,
+          functionName: item.functionName ?? null,
+          requiresSubstitution: item.requiresSubstitution ?? true,
+        })),
+      });
+
+      const classScheduleItems = items.filter((item) => item.classId);
+      const savedClassSchedules = [];
+
+      for (const item of classScheduleItems) {
+        const saved = await transaction.classSchedule.upsert({
+          where: {
+            classId_weekday_timeSlotId: {
+              classId: item.classId,
+              weekday: item.weekday,
+              timeSlotId: item.timeSlotId,
+            },
+          },
+          create: {
+            tenantId: item.tenantId,
+            classId: item.classId,
+            weekday: item.weekday,
+            timeSlotId: item.timeSlotId,
+            teacherId: employeeId,
+            room: item.room || null,
+            notes: item.notes || null,
+            isActive: true,
+          },
+          update: {
+            teacherId: employeeId,
+            room: item.room || null,
+            notes: item.notes || null,
+            isActive: true,
+          },
+        });
+
+        savedClassSchedules.push(saved);
+      }
+
+      return savedClassSchedules;
+    });
   }
-
-  return this.prisma.employeeWeeklySchedule.createMany({
-    data: items,
-  });
-}
   update(id: string, data: any) {
     return this.prisma.employeeWeeklySchedule.update({
       where: { id },
@@ -63,4 +121,3 @@ export class EmployeeWeeklySchedulesService {
     });
   }
 }
-

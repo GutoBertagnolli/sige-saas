@@ -202,8 +202,8 @@ export default function EmployeePlannerPage() {
 
       alert('Planner salvo com sucesso.');
     },
-    onError: () => {
-      alert('Erro ao salvar planner.');
+    onError: (error: any) => {
+      alert(error?.response?.data?.message ?? 'Erro ao salvar planner.');
     },
   });
 
