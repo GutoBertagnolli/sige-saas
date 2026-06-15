@@ -217,46 +217,68 @@ const PROFILE_PHOTO_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const PROFILE_PHOTO_EXTENSIONS = /\.(jpe?g|png|webp)$/i;
 const PROFILE_PHOTO_MAX_SIZE = 8 * 1024 * 1024;
 const PROFILE_PHOTO_MAX_DIMENSION = 480;
+const PROFILE_PHOTO_PREVIEW_SIZE = 240;
 
 function isSupportedProfilePhoto(file: File) {
   return PROFILE_PHOTO_TYPES.has(file.type) || PROFILE_PHOTO_EXTENSIONS.test(file.name);
 }
 
-function resizeProfilePhoto(file: File) {
+function readProfilePhoto(file: File) {
   return new Promise<string>((resolve, reject) => {
-    const imageUrl = URL.createObjectURL(file);
+    const reader = new FileReader();
+
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(new Error('Não foi possível ler a imagem.'));
+    reader.readAsDataURL(file);
+  });
+}
+
+function loadImage(source: string) {
+  return new Promise<HTMLImageElement>((resolve, reject) => {
     const image = new Image();
 
-    image.onload = () => {
-      URL.revokeObjectURL(imageUrl);
-
-      const scale = Math.min(
-        1,
-        PROFILE_PHOTO_MAX_DIMENSION / Math.max(image.width, image.height),
-      );
-      const width = Math.max(1, Math.round(image.width * scale));
-      const height = Math.max(1, Math.round(image.height * scale));
-      const canvas = document.createElement('canvas');
-      const context = canvas.getContext('2d');
-
-      if (!context) {
-        reject(new Error('Não foi possível preparar a imagem.'));
-        return;
-      }
-
-      canvas.width = width;
-      canvas.height = height;
-      context.drawImage(image, 0, 0, width, height);
-      resolve(canvas.toDataURL('image/jpeg', 0.78));
-    };
-
-    image.onerror = () => {
-      URL.revokeObjectURL(imageUrl);
-      reject(new Error('Não foi possível ler a imagem. Use JPG, PNG ou WebP.'));
-    };
-
-    image.src = imageUrl;
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error('Não foi possível ler a imagem. Use JPG, PNG ou WebP.'));
+    image.src = source;
   });
+}
+
+async function cropProfilePhoto(
+  source: string,
+  zoom: number,
+  offset: { x: number; y: number },
+) {
+  const image = await loadImage(source);
+  const canvas = document.createElement('canvas');
+  const context = canvas.getContext('2d');
+
+  if (!context) {
+    throw new Error('Não foi possível preparar a imagem.');
+  }
+
+  canvas.width = PROFILE_PHOTO_MAX_DIMENSION;
+  canvas.height = PROFILE_PHOTO_MAX_DIMENSION;
+
+  const coverScale =
+    Math.max(
+      PROFILE_PHOTO_MAX_DIMENSION / image.width,
+      PROFILE_PHOTO_MAX_DIMENSION / image.height,
+    ) * zoom;
+  const width = image.width * coverScale;
+  const height = image.height * coverScale;
+  const previewToOutput = PROFILE_PHOTO_MAX_DIMENSION / PROFILE_PHOTO_PREVIEW_SIZE;
+
+  context.fillStyle = '#ffffff';
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.drawImage(
+    image,
+    (PROFILE_PHOTO_MAX_DIMENSION - width) / 2 + offset.x * previewToOutput,
+    (PROFILE_PHOTO_MAX_DIMENSION - height) / 2 + offset.y * previewToOutput,
+    width,
+    height,
+  );
+
+  return canvas.toDataURL('image/jpeg', 0.82);
 }
 
 async function updatePassword(data: { currentPassword: string; newPassword: string }) {
@@ -545,6 +567,16 @@ function ProfilePhotoModal({
   onUserUpdate: (user: AuthUser) => void;
 }) {
   const [photoUrl, setPhotoUrl] = React.useState(user.photoUrl ?? '');
+  const [photoSource, setPhotoSource] = React.useState('');
+  const [photoDimensions, setPhotoDimensions] = React.useState({ width: 1, height: 1 });
+  const [zoom, setZoom] = React.useState(1);
+  const [offset, setOffset] = React.useState({ x: 0, y: 0 });
+  const [dragStart, setDragStart] = React.useState<{
+    pointerX: number;
+    pointerY: number;
+    offsetX: number;
+    offsetY: number;
+  } | null>(null);
   const [saving, setSaving] = React.useState(false);
   const [loadingPhoto, setLoadingPhoto] = React.useState(false);
   const [error, setError] = React.useState('');
@@ -567,7 +599,14 @@ function ProfilePhotoModal({
     setLoadingPhoto(true);
 
     try {
-      setPhotoUrl(await resizeProfilePhoto(file));
+      const source = await readProfilePhoto(file);
+      const image = await loadImage(source);
+
+      setPhotoSource(source);
+      setPhotoDimensions({ width: image.width, height: image.height });
+      setPhotoUrl('');
+      setZoom(1);
+      setOffset({ x: 0, y: 0 });
     } catch (error: any) {
       setError(error?.message ?? 'Não foi possível preparar a foto.');
     } finally {
@@ -575,16 +614,35 @@ function ProfilePhotoModal({
     }
   }
 
+  function handlePointerMove(event: React.PointerEvent<HTMLDivElement>) {
+    if (!dragStart) return;
+
+    setOffset({
+      x: dragStart.offsetX + event.clientX - dragStart.pointerX,
+      y: dragStart.offsetY + event.clientY - dragStart.pointerY,
+    });
+  }
+
+  const previewCoverScale = Math.max(
+    PROFILE_PHOTO_PREVIEW_SIZE / photoDimensions.width,
+    PROFILE_PHOTO_PREVIEW_SIZE / photoDimensions.height,
+  );
+  const previewImageWidth = photoDimensions.width * previewCoverScale;
+  const previewImageHeight = photoDimensions.height * previewCoverScale;
+
   async function save() {
     setSaving(true);
     setError('');
 
     try {
-      const session = await updateProfile({ photoUrl: photoUrl || null });
+      const finalPhotoUrl = photoSource
+        ? await cropProfilePhoto(photoSource, zoom, offset)
+        : photoUrl || null;
+      const session = await updateProfile({ photoUrl: finalPhotoUrl });
       onUserUpdate(session.user);
       onClose();
     } catch (error: any) {
-      setError(error?.response?.data?.message ?? 'Erro ao atualizar foto.');
+      setError(error?.response?.data?.message ?? error?.message ?? 'Erro ao atualizar foto.');
     } finally {
       setSaving(false);
     }
@@ -593,27 +651,94 @@ function ProfilePhotoModal({
   return (
     <Modal title="Alterar foto" onClose={onClose}>
       <div className="space-y-4">
-        <div className="flex items-center gap-4">
-          {photoUrl ? (
-            <img src={photoUrl} alt={user.name} className="h-20 w-20 rounded-full border object-cover" />
+        <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-start">
+          {photoSource ? (
+            <div className="flex flex-col items-center gap-3">
+              <div
+                className="relative overflow-hidden rounded-full border bg-slate-100 shadow-inner touch-none"
+                style={{
+                  width: PROFILE_PHOTO_PREVIEW_SIZE,
+                  height: PROFILE_PHOTO_PREVIEW_SIZE,
+                }}
+                onPointerDown={(event) => {
+                  event.currentTarget.setPointerCapture(event.pointerId);
+                  setDragStart({
+                    pointerX: event.clientX,
+                    pointerY: event.clientY,
+                    offsetX: offset.x,
+                    offsetY: offset.y,
+                  });
+                }}
+                onPointerMove={handlePointerMove}
+                onPointerUp={() => setDragStart(null)}
+                onPointerCancel={() => setDragStart(null)}
+              >
+                <img
+                  src={photoSource}
+                  alt={user.name}
+                  draggable={false}
+                  className="absolute left-1/2 top-1/2 max-w-none select-none"
+                  style={{
+                    width: previewImageWidth,
+                    height: previewImageHeight,
+                    transform: `translate(-50%, -50%) translate(${offset.x}px, ${offset.y}px) scale(${zoom})`,
+                  }}
+                />
+              </div>
+              <div className="w-full max-w-60">
+                <label className="text-xs font-medium text-slate-600">Zoom</label>
+                <input
+                  type="range"
+                  min="1"
+                  max="3"
+                  step="0.01"
+                  value={zoom}
+                  onChange={(event) => setZoom(Number(event.target.value))}
+                  className="mt-1 w-full"
+                />
+              </div>
+            </div>
+          ) : photoUrl ? (
+            <img src={photoUrl} alt={user.name} className="h-24 w-24 rounded-full border object-cover" />
           ) : (
-            <div className="flex h-20 w-20 items-center justify-center rounded-full border bg-slate-100">
+            <div className="flex h-24 w-24 items-center justify-center rounded-full border bg-slate-100">
               <UserCircle className="h-10 w-10 text-slate-400" />
             </div>
           )}
-          <input
-            type="file"
-            accept="image/jpeg,image/png,image/webp"
-            onChange={(event) => handleFile(event.target.files?.[0])}
-            disabled={loadingPhoto || saving}
-            className="w-full rounded-xl border px-3 py-2 text-sm"
-          />
+          <div className="w-full min-w-0 space-y-3">
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              onChange={(event) => handleFile(event.target.files?.[0])}
+              disabled={loadingPhoto || saving}
+              className="w-full rounded-xl border px-3 py-2 text-sm"
+            />
+            {photoSource && (
+              <button
+                type="button"
+                onClick={() => {
+                  setZoom(1);
+                  setOffset({ x: 0, y: 0 });
+                }}
+                className="rounded-xl border px-3 py-2 text-sm text-slate-700"
+              >
+                Centralizar
+              </button>
+            )}
+          </div>
         </div>
 
         {error && <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
 
         <div className="flex justify-end gap-2">
-          <button onClick={() => setPhotoUrl('')} className="rounded-xl border px-4 py-2 text-sm text-slate-700">
+          <button
+            onClick={() => {
+              setPhotoUrl('');
+              setPhotoSource('');
+              setPhotoDimensions({ width: 1, height: 1 });
+            }}
+            className="rounded-xl border px-4 py-2 text-sm text-slate-700"
+          >
             Remover foto
           </button>
           <button onClick={onClose} className="rounded-xl border px-4 py-2 text-sm text-slate-700">
