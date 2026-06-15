@@ -19,6 +19,24 @@ type Employee = {
   }>;
 };
 
+type Absence = {
+  id: string;
+  startDate: string;
+  endDate: string;
+  status: string;
+  employee?: Employee | null;
+};
+
+type Substitution = {
+  id: string;
+  status: string;
+  originalTeacher?: Employee | null;
+  substituteTeacher?: Employee | null;
+  absence?: {
+    employee?: Employee | null;
+  } | null;
+};
+
 type TimeSlot = {
   id: string;
   slotOrder: number;
@@ -59,6 +77,14 @@ type EmployeePlanner = {
 type ClassPlanner = {
   classItem: ClassItem;
   schedules: Array<WeeklySchedule & { employee: Employee }>;
+};
+
+type RankingRow = {
+  key: string;
+  label: string;
+  schoolName?: string;
+  count: number;
+  days?: number;
 };
 
 const WEEKDAYS = [
@@ -115,6 +141,16 @@ async function getClasses() {
   return response.data;
 }
 
+async function getAbsences() {
+  const response = await api.get<Absence[]>('/absences');
+  return response.data;
+}
+
+async function getSubstitutions() {
+  const response = await api.get<Substitution[]>('/substitutions');
+  return response.data;
+}
+
 function formatRole(roleType?: string) {
   return (roleType || 'SERVIDOR').replace(/_/g, ' ');
 }
@@ -158,6 +194,19 @@ function formatMinutes(totalMinutes: number) {
   }
 
   return `${hours}h${String(minutes).padStart(2, '0')}`;
+}
+
+function getDateDays(startDate?: string, endDate?: string) {
+  if (!startDate || !endDate) return 0;
+
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+
+  start.setHours(0, 0, 0, 0);
+  end.setHours(0, 0, 0, 0);
+
+  const diff = end.getTime() - start.getTime();
+  return Math.max(1, Math.floor(diff / 86400000) + 1);
 }
 
 function getSlotSortValue(slot?: TimeSlot | null) {
@@ -291,6 +340,75 @@ function PlannerTable({ planner }: { planner: EmployeePlanner }) {
   );
 }
 
+function RankingTable({
+  title,
+  description,
+  rows,
+  countLabel,
+  showDays = false,
+}: {
+  title: string;
+  description: string;
+  rows: RankingRow[];
+  countLabel: string;
+  showDays?: boolean;
+}) {
+  return (
+    <section className="rounded-lg border bg-white shadow-sm print:shadow-none">
+      <div className="border-b px-4 py-3">
+        <h2 className="text-base font-semibold text-slate-950">{title}</h2>
+        <p className="mt-1 text-xs text-slate-500">{description}</p>
+      </div>
+
+      <div className="overflow-auto">
+        <table className="w-full min-w-[680px] border-collapse text-xs">
+          <thead>
+            <tr className="bg-slate-100 text-left text-slate-700">
+              <th className="w-16 border-b px-3 py-2 text-right">Rank</th>
+              <th className="border-b px-3 py-2">Nome</th>
+              <th className="border-b px-3 py-2">Escola</th>
+              <th className="border-b px-3 py-2 text-right">{countLabel}</th>
+              {showDays && (
+                <th className="border-b px-3 py-2 text-right">Dias</th>
+              )}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row, index) => (
+              <tr key={row.key} className="border-b last:border-b-0">
+                <td className="px-3 py-2 text-right font-semibold text-slate-500">
+                  {index + 1}
+                </td>
+                <td className="px-3 py-2 font-medium text-slate-950">{row.label}</td>
+                <td className="px-3 py-2 text-slate-600">{row.schoolName || '-'}</td>
+                <td className="px-3 py-2 text-right font-semibold text-slate-950">
+                  {row.count}
+                </td>
+                {showDays && (
+                  <td className="px-3 py-2 text-right font-semibold text-slate-950">
+                    {row.days ?? 0}
+                  </td>
+                )}
+              </tr>
+            ))}
+
+            {rows.length === 0 && (
+              <tr>
+                <td
+                  colSpan={showDays ? 5 : 4}
+                  className="px-3 py-6 text-center text-slate-500"
+                >
+                  Nenhum registro encontrado para os filtros selecionados.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
 function ClassPlannerTable({ planner }: { planner: ClassPlanner }) {
   const rows = buildPlannerRows(planner.schedules);
   const scheduleByKey = new Map(
@@ -400,7 +518,9 @@ export default function ReportsPage() {
   const [schoolId, setSchoolId] = useState('');
   const [employeeId, setEmployeeId] = useState('');
   const [classId, setClassId] = useState('');
-  const [reportType, setReportType] = useState<'employee' | 'class'>('employee');
+  const [reportType, setReportType] = useState<
+    'employee' | 'class' | 'absences' | 'substitutions'
+  >('employee');
 
   const { data: employees = [], isLoading: loadingEmployees } = useQuery({
     queryKey: ['employees'],
@@ -410,6 +530,16 @@ export default function ReportsPage() {
   const { data: classes = [], isLoading: loadingClasses } = useQuery({
     queryKey: ['classes'],
     queryFn: getClasses,
+  });
+
+  const { data: absences = [], isLoading: loadingAbsences } = useQuery({
+    queryKey: ['absences'],
+    queryFn: getAbsences,
+  });
+
+  const { data: substitutions = [], isLoading: loadingSubstitutions } = useQuery({
+    queryKey: ['substitutions'],
+    queryFn: getSubstitutions,
   });
 
   const {
@@ -498,6 +628,130 @@ export default function ReportsPage() {
       .sort((a, b) => a.classItem.name.localeCompare(b.classItem.name));
   }, [classes, planners, schoolId, employeeId, classId]);
 
+  const activeAbsences = useMemo(
+    () => absences.filter((absence) => absence.status !== 'CANCELLED'),
+    [absences],
+  );
+
+  const absenceRowsByEmployee = useMemo(() => {
+    const rowsByEmployee = new Map<string, RankingRow>();
+
+    activeAbsences.forEach((absence) => {
+      const employee = absence.employee;
+
+      if (!employee?.id) return;
+      if (schoolId && employee.school?.id !== schoolId) return;
+      if (employeeId && employee.id !== employeeId) return;
+
+      const current =
+        rowsByEmployee.get(employee.id) ??
+        {
+          key: employee.id,
+          label: employee.name,
+          schoolName: employee.school?.name ?? 'Sem escola vinculada',
+          count: 0,
+          days: 0,
+        };
+
+      current.count += 1;
+      current.days = (current.days ?? 0) + getDateDays(absence.startDate, absence.endDate);
+      rowsByEmployee.set(employee.id, current);
+    });
+
+    return Array.from(rowsByEmployee.values()).sort(
+      (a, b) => b.count - a.count || (b.days ?? 0) - (a.days ?? 0) || a.label.localeCompare(b.label),
+    );
+  }, [activeAbsences, schoolId, employeeId]);
+
+  const absenceRowsBySchool = useMemo(() => {
+    const rowsBySchool = new Map<string, RankingRow>();
+
+    activeAbsences.forEach((absence) => {
+      const school = absence.employee?.school;
+      const key = school?.id ?? 'no-school';
+
+      if (schoolId && key !== schoolId) return;
+
+      const current =
+        rowsBySchool.get(key) ??
+        {
+          key,
+          label: school?.name ?? 'Sem escola vinculada',
+          schoolName: school?.name ?? 'Sem escola vinculada',
+          count: 0,
+          days: 0,
+        };
+
+      current.count += 1;
+      current.days = (current.days ?? 0) + getDateDays(absence.startDate, absence.endDate);
+      rowsBySchool.set(key, current);
+    });
+
+    return Array.from(rowsBySchool.values()).sort(
+      (a, b) => b.count - a.count || (b.days ?? 0) - (a.days ?? 0) || a.label.localeCompare(b.label),
+    );
+  }, [activeAbsences, schoolId]);
+
+  const activeSubstitutions = useMemo(
+    () => substitutions.filter((substitution) => substitution.status !== 'CANCELLED'),
+    [substitutions],
+  );
+
+  const substitutionRowsByEmployee = useMemo(() => {
+    const rowsByEmployee = new Map<string, RankingRow>();
+
+    activeSubstitutions.forEach((substitution) => {
+      const employee = substitution.substituteTeacher;
+
+      if (!employee?.id) return;
+      if (schoolId && employee.school?.id !== schoolId) return;
+      if (employeeId && employee.id !== employeeId) return;
+
+      const current =
+        rowsByEmployee.get(employee.id) ??
+        {
+          key: employee.id,
+          label: employee.name,
+          schoolName: employee.school?.name ?? 'Sem escola vinculada',
+          count: 0,
+        };
+
+      current.count += 1;
+      rowsByEmployee.set(employee.id, current);
+    });
+
+    return Array.from(rowsByEmployee.values()).sort(
+      (a, b) => b.count - a.count || a.label.localeCompare(b.label),
+    );
+  }, [activeSubstitutions, schoolId, employeeId]);
+
+  const substitutionRowsBySchool = useMemo(() => {
+    const rowsBySchool = new Map<string, RankingRow>();
+
+    activeSubstitutions.forEach((substitution) => {
+      const school = substitution.substituteTeacher?.school;
+      const key = school?.id ?? 'no-school';
+
+      if (schoolId && key !== schoolId) return;
+
+      const current =
+        rowsBySchool.get(key) ??
+        {
+          key,
+          label: school?.name ?? 'Sem escola vinculada',
+          schoolName: school?.name ?? 'Sem escola vinculada',
+          count: 0,
+        };
+
+      current.count += 1;
+      rowsBySchool.set(key, current);
+    });
+
+    return Array.from(rowsBySchool.values()).sort(
+      (a, b) => b.count - a.count || a.label.localeCompare(b.label),
+    );
+  }, [activeSubstitutions, schoolId]);
+
   const summaryRows = useMemo(() => {
     const rowsByKey = new Map<
       string,
@@ -537,7 +791,12 @@ export default function ReportsPage() {
     );
   }, [filteredPlanners]);
 
-  const loading = loadingEmployees || loadingClasses || loadingPlanners;
+  const loading =
+    loadingEmployees ||
+    loadingClasses ||
+    loadingPlanners ||
+    loadingAbsences ||
+    loadingSubstitutions;
 
   return (
     <section className="p-5 print:bg-white print:p-0">
@@ -547,7 +806,7 @@ export default function ReportsPage() {
             Relatorio de horarios
           </h1>
           <p className="mt-1 text-sm text-slate-500">
-            Quadros semanais por professor ou por turma, conforme o planner cadastrado.
+            Quadros semanais e rankings de afastamentos e substituições.
           </p>
         </div>
 
@@ -577,11 +836,15 @@ export default function ReportsPage() {
           <label className="text-sm font-medium text-slate-700">Tipo</label>
           <select
             value={reportType}
-            onChange={(event) => setReportType(event.target.value as 'employee' | 'class')}
+            onChange={(event) =>
+              setReportType(event.target.value as 'employee' | 'class' | 'absences' | 'substitutions')
+            }
             className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
           >
             <option value="employee">Por professor</option>
             <option value="class">Por turma</option>
+            <option value="absences">Afastamentos</option>
+            <option value="substitutions">Substituições</option>
           </select>
         </div>
 
@@ -646,6 +909,80 @@ export default function ReportsPage() {
       {loading ? (
         <div className="rounded-lg border bg-white p-5 text-sm text-slate-500">
           Carregando horarios...
+        </div>
+      ) : reportType === 'absences' ? (
+        <div className="grid gap-5">
+          <section className="rounded-lg border bg-white p-4 shadow-sm print:shadow-none">
+            <h2 className="text-base font-semibold text-slate-950">
+              Geral de afastamentos
+            </h2>
+            <div className="mt-3 grid gap-3 text-sm md:grid-cols-3">
+              <div className="rounded-lg border bg-slate-50 p-3">
+                <div className="text-xs text-slate-500">Afastamentos</div>
+                <div className="text-2xl font-semibold">{absenceRowsByEmployee.reduce((sum, row) => sum + row.count, 0)}</div>
+              </div>
+              <div className="rounded-lg border bg-slate-50 p-3">
+                <div className="text-xs text-slate-500">Dias afastados</div>
+                <div className="text-2xl font-semibold">{absenceRowsByEmployee.reduce((sum, row) => sum + (row.days ?? 0), 0)}</div>
+              </div>
+              <div className="rounded-lg border bg-slate-50 p-3">
+                <div className="text-xs text-slate-500">Servidores no ranking</div>
+                <div className="text-2xl font-semibold">{absenceRowsByEmployee.length}</div>
+              </div>
+            </div>
+          </section>
+
+          <RankingTable
+            title="Afastamentos por servidor"
+            description="Servidores ordenados de quem mais faltou para quem menos faltou."
+            rows={absenceRowsByEmployee}
+            countLabel="Afastamentos"
+            showDays
+          />
+
+          <RankingTable
+            title="Afastamentos por escola"
+            description="Escolas ordenadas pelo total de afastamentos."
+            rows={absenceRowsBySchool}
+            countLabel="Afastamentos"
+            showDays
+          />
+        </div>
+      ) : reportType === 'substitutions' ? (
+        <div className="grid gap-5">
+          <section className="rounded-lg border bg-white p-4 shadow-sm print:shadow-none">
+            <h2 className="text-base font-semibold text-slate-950">
+              Geral de substituições
+            </h2>
+            <div className="mt-3 grid gap-3 text-sm md:grid-cols-3">
+              <div className="rounded-lg border bg-slate-50 p-3">
+                <div className="text-xs text-slate-500">Substituições</div>
+                <div className="text-2xl font-semibold">{substitutionRowsByEmployee.reduce((sum, row) => sum + row.count, 0)}</div>
+              </div>
+              <div className="rounded-lg border bg-slate-50 p-3">
+                <div className="text-xs text-slate-500">Substitutos no ranking</div>
+                <div className="text-2xl font-semibold">{substitutionRowsByEmployee.length}</div>
+              </div>
+              <div className="rounded-lg border bg-slate-50 p-3">
+                <div className="text-xs text-slate-500">Escolas no ranking</div>
+                <div className="text-2xl font-semibold">{substitutionRowsBySchool.length}</div>
+              </div>
+            </div>
+          </section>
+
+          <RankingTable
+            title="Substituições por servidor"
+            description="Servidores ordenados de quem mais substituiu para quem menos substituiu."
+            rows={substitutionRowsByEmployee}
+            countLabel="Substituições"
+          />
+
+          <RankingTable
+            title="Substituições por escola"
+            description="Escolas ordenadas pelo total de substituições realizadas."
+            rows={substitutionRowsBySchool}
+            countLabel="Substituições"
+          />
         </div>
       ) : reportType === 'class' ? (
         classPlanners.length > 0 ? (
