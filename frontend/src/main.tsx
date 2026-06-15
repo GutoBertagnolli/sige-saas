@@ -213,6 +213,52 @@ async function updateProfile(data: { photoUrl: string | null }) {
   return response.data;
 }
 
+const PROFILE_PHOTO_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
+const PROFILE_PHOTO_EXTENSIONS = /\.(jpe?g|png|webp)$/i;
+const PROFILE_PHOTO_MAX_SIZE = 8 * 1024 * 1024;
+const PROFILE_PHOTO_MAX_DIMENSION = 480;
+
+function isSupportedProfilePhoto(file: File) {
+  return PROFILE_PHOTO_TYPES.has(file.type) || PROFILE_PHOTO_EXTENSIONS.test(file.name);
+}
+
+function resizeProfilePhoto(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const imageUrl = URL.createObjectURL(file);
+    const image = new Image();
+
+    image.onload = () => {
+      URL.revokeObjectURL(imageUrl);
+
+      const scale = Math.min(
+        1,
+        PROFILE_PHOTO_MAX_DIMENSION / Math.max(image.width, image.height),
+      );
+      const width = Math.max(1, Math.round(image.width * scale));
+      const height = Math.max(1, Math.round(image.height * scale));
+      const canvas = document.createElement('canvas');
+      const context = canvas.getContext('2d');
+
+      if (!context) {
+        reject(new Error('Não foi possível preparar a imagem.'));
+        return;
+      }
+
+      canvas.width = width;
+      canvas.height = height;
+      context.drawImage(image, 0, 0, width, height);
+      resolve(canvas.toDataURL('image/jpeg', 0.78));
+    };
+
+    image.onerror = () => {
+      URL.revokeObjectURL(imageUrl);
+      reject(new Error('Não foi possível ler a imagem. Use JPG, PNG ou WebP.'));
+    };
+
+    image.src = imageUrl;
+  });
+}
+
 async function updatePassword(data: { currentPassword: string; newPassword: string }) {
   await api.put('/auth/password', data);
 }
@@ -500,14 +546,33 @@ function ProfilePhotoModal({
 }) {
   const [photoUrl, setPhotoUrl] = React.useState(user.photoUrl ?? '');
   const [saving, setSaving] = React.useState(false);
+  const [loadingPhoto, setLoadingPhoto] = React.useState(false);
   const [error, setError] = React.useState('');
 
-  function handleFile(file?: File) {
+  async function handleFile(file?: File) {
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = () => setPhotoUrl(String(reader.result || ''));
-    reader.readAsDataURL(file);
+    setError('');
+
+    if (!isSupportedProfilePhoto(file)) {
+      setError('Use uma foto em JPG, PNG ou WebP. O formato HEIC do iPhone precisa ser convertido antes.');
+      return;
+    }
+
+    if (file.size > PROFILE_PHOTO_MAX_SIZE) {
+      setError('A foto deve ter no máximo 8 MB.');
+      return;
+    }
+
+    setLoadingPhoto(true);
+
+    try {
+      setPhotoUrl(await resizeProfilePhoto(file));
+    } catch (error: any) {
+      setError(error?.message ?? 'Não foi possível preparar a foto.');
+    } finally {
+      setLoadingPhoto(false);
+    }
   }
 
   async function save() {
@@ -538,8 +603,9 @@ function ProfilePhotoModal({
           )}
           <input
             type="file"
-            accept="image/*"
+            accept="image/jpeg,image/png,image/webp"
             onChange={(event) => handleFile(event.target.files?.[0])}
+            disabled={loadingPhoto || saving}
             className="w-full rounded-xl border px-3 py-2 text-sm"
           />
         </div>
@@ -555,10 +621,10 @@ function ProfilePhotoModal({
           </button>
           <button
             onClick={save}
-            disabled={saving}
+            disabled={saving || loadingPhoto}
             className="rounded-xl bg-slate-900 px-4 py-2 text-sm text-white disabled:opacity-60"
           >
-            {saving ? 'Salvando...' : 'Salvar'}
+            {saving ? 'Salvando...' : loadingPhoto ? 'Preparando...' : 'Salvar'}
           </button>
         </div>
       </div>
