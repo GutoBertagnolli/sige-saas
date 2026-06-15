@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Headers, Post, Put } from '@nestjs/common';
-import { IsEmail, IsString, MinLength } from 'class-validator';
+import { IsEmail, IsOptional, IsString, MinLength } from 'class-validator';
 import { AuthService } from './auth.service';
 
 class LoginDto {
@@ -9,6 +9,8 @@ class LoginDto {
 }
 
 class UpdateProfileDto {
+  @IsOptional()
+  @IsString()
   photoUrl?: string | null;
 }
 
