@@ -482,8 +482,8 @@ export default function EmployeePlannerPage() {
       onMouseLeave={() => setIsDragging(false)}
     >
       <div className="bg-white rounded-2xl shadow-sm border p-6">
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-6">
-          <div>
+        <div className="mb-6 flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+          <div className="min-w-0">
             <h2 className="text-lg font-semibold">Planner semanal</h2>
             <p className="text-sm text-slate-500">
               {employee?.name || 'Servidor'} •{' '}
@@ -492,36 +492,37 @@ export default function EmployeePlannerPage() {
             </p>
           </div>
 
-          <div className="flex flex-wrap gap-2">
-            <button onClick={() => fillShift('MATUTINO')} className="px-3 py-2 rounded-xl border text-sm">
-              Preencher matutino
+          <div className="flex max-w-full gap-2 overflow-x-auto pb-1 xl:justify-end">
+            <button onClick={() => fillShift('MATUTINO')} title="Preencher matutino" className="shrink-0 whitespace-nowrap rounded-xl border px-2.5 py-2 text-xs lg:text-sm">
+              Matutino
             </button>
 
-            <button onClick={() => fillShift('VESPERTINO')} className="px-3 py-2 rounded-xl border text-sm">
-              Preencher vespertino
+            <button onClick={() => fillShift('VESPERTINO')} title="Preencher vespertino" className="shrink-0 whitespace-nowrap rounded-xl border px-2.5 py-2 text-xs lg:text-sm">
+              Vespertino
             </button>
 
-            <button onClick={fillIntegral} className="px-3 py-2 rounded-xl border text-sm">
-              Preencher integral
+            <button onClick={fillIntegral} title="Preencher integral" className="shrink-0 whitespace-nowrap rounded-xl border px-2.5 py-2 text-xs lg:text-sm">
+              Integral
             </button>
 
-	   <button
-  onClick={copyMondayToAllDays}
-  className="px-3 py-2 rounded-xl border text-sm"
->
-  Copiar segunda para todos
-</button>
+            <button
+              onClick={copyMondayToAllDays}
+              title="Copiar segunda para todos"
+              className="shrink-0 whitespace-nowrap rounded-xl border px-2.5 py-2 text-xs lg:text-sm"
+            >
+              Copiar segunda
+            </button>
 
-            <button onClick={clearPlanner} className="px-3 py-2 rounded-xl border border-red-200 text-red-700 text-sm">
+            <button onClick={clearPlanner} className="shrink-0 whitespace-nowrap rounded-xl border border-red-200 px-2.5 py-2 text-xs text-red-700 lg:text-sm">
               Limpar
             </button>
 
             <button
               onClick={savePlanner}
               disabled={saveMutation.isPending}
-              className="px-4 py-2 rounded-xl bg-slate-900 text-white text-sm disabled:opacity-60"
+              className="shrink-0 whitespace-nowrap rounded-xl bg-slate-900 px-3 py-2 text-xs text-white disabled:opacity-60 lg:text-sm"
             >
-              {saveMutation.isPending ? 'Salvando...' : 'Salvar planner'}
+              {saveMutation.isPending ? 'Salvando...' : 'Salvar'}
             </button>
           </div>
         </div>

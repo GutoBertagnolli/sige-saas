@@ -87,6 +87,35 @@ type RankingRow = {
   days?: number;
 };
 
+type ReportType = 'employee' | 'class' | 'absences' | 'substitutions';
+
+const REPORT_SECTIONS: Array<{
+  id: ReportType;
+  label: string;
+  description: string;
+}> = [
+  {
+    id: 'employee',
+    label: 'Professores',
+    description: 'Planner semanal e total de horas por matéria.',
+  },
+  {
+    id: 'class',
+    label: 'Turmas',
+    description: 'Horários por turma, professor e matéria.',
+  },
+  {
+    id: 'absences',
+    label: 'Afastamentos',
+    description: 'Ranking geral, por escola e por servidor.',
+  },
+  {
+    id: 'substitutions',
+    label: 'Substituições',
+    description: 'Ranking dos servidores que mais substituem.',
+  },
+];
+
 const WEEKDAYS = [
   { key: 'MONDAY', label: 'Segunda' },
   { key: 'TUESDAY', label: 'Terca' },
@@ -518,9 +547,7 @@ export default function ReportsPage() {
   const [schoolId, setSchoolId] = useState('');
   const [employeeId, setEmployeeId] = useState('');
   const [classId, setClassId] = useState('');
-  const [reportType, setReportType] = useState<
-    'employee' | 'class' | 'absences' | 'substitutions'
-  >('employee');
+  const [reportType, setReportType] = useState<ReportType>('employee');
 
   const { data: employees = [], isLoading: loadingEmployees } = useQuery({
     queryKey: ['employees'],
@@ -798,6 +825,20 @@ export default function ReportsPage() {
     loadingAbsences ||
     loadingSubstitutions;
 
+  const currentReport =
+    REPORT_SECTIONS.find((section) => section.id === reportType) ??
+    REPORT_SECTIONS[0];
+
+  function selectReportType(nextReportType: ReportType) {
+    setReportType(nextReportType);
+
+    if (nextReportType === 'class') {
+      setEmployeeId('');
+    } else {
+      setClassId('');
+    }
+  }
+
   return (
     <section className="p-5 print:bg-white print:p-0">
       <div className="mb-5 flex flex-wrap items-start justify-between gap-3 print:hidden">
@@ -831,71 +872,87 @@ export default function ReportsPage() {
         </div>
       </div>
 
-      <div className="mb-5 grid gap-3 rounded-lg border bg-white p-4 shadow-sm md:grid-cols-4 print:hidden">
-        <div>
-          <label className="text-sm font-medium text-slate-700">Tipo</label>
-          <select
-            value={reportType}
-            onChange={(event) =>
-              setReportType(event.target.value as 'employee' | 'class' | 'absences' | 'substitutions')
-            }
-            className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
-          >
-            <option value="employee">Por professor</option>
-            <option value="class">Por turma</option>
-            <option value="absences">Afastamentos</option>
-            <option value="substitutions">Substituições</option>
-          </select>
+      <div className="mb-4 overflow-x-auto print:hidden">
+        <div className="inline-flex min-w-full gap-1 rounded-lg border bg-white p-1 shadow-sm md:min-w-0">
+          {REPORT_SECTIONS.map((section) => (
+            <button
+              key={section.id}
+              type="button"
+              onClick={() => selectReportType(section.id)}
+              className={`shrink-0 rounded-md px-4 py-2 text-sm font-medium transition ${
+                reportType === section.id
+                  ? 'bg-slate-900 text-white shadow-sm'
+                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-950'
+              }`}
+            >
+              {section.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="mb-5 rounded-lg border bg-white p-4 shadow-sm print:hidden">
+        <div className="mb-4">
+          <h2 className="text-base font-semibold text-slate-950">
+            {currentReport.label}
+          </h2>
+          <p className="mt-1 text-sm text-slate-500">
+            {currentReport.description}
+          </p>
         </div>
 
-        <div>
-          <label className="text-sm font-medium text-slate-700">Escola</label>
-          <select
-            value={schoolId}
-            onChange={(event) => setSchoolId(event.target.value)}
-            className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
-          >
-            <option value="">Todas as escolas</option>
-            {schools.map((school) => (
-              <option key={school.id} value={school.id}>
-                {school.name}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div>
-          <label className="text-sm font-medium text-slate-700">Servidor</label>
-          <select
-            value={employeeId}
-            onChange={(event) => setEmployeeId(event.target.value)}
-            className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
-          >
-            <option value="">Todos os servidores</option>
-            {employees
-              .filter((employee) => !schoolId || employee.school?.id === schoolId)
-              .map((employee) => (
-                <option key={employee.id} value={employee.id}>
-                  {employee.name}
+        <div className="grid gap-3 md:grid-cols-2">
+          <div>
+            <label className="text-sm font-medium text-slate-700">Escola</label>
+            <select
+              value={schoolId}
+              onChange={(event) => setSchoolId(event.target.value)}
+              className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
+            >
+              <option value="">Todas as escolas</option>
+              {schools.map((school) => (
+                <option key={school.id} value={school.id}>
+                  {school.name}
                 </option>
               ))}
-          </select>
-        </div>
+            </select>
+          </div>
 
-        <div>
-          <label className="text-sm font-medium text-slate-700">Turma</label>
-          <select
-            value={classId}
-            onChange={(event) => setClassId(event.target.value)}
-            className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
-          >
-            <option value="">Todas as turmas</option>
-            {filteredClasses.map((classItem) => (
-              <option key={classItem.id} value={classItem.id}>
-                {classItem.name}
-              </option>
-            ))}
-          </select>
+          {reportType === 'class' ? (
+            <div>
+              <label className="text-sm font-medium text-slate-700">Turma</label>
+              <select
+                value={classId}
+                onChange={(event) => setClassId(event.target.value)}
+                className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
+              >
+                <option value="">Todas as turmas</option>
+                {filteredClasses.map((classItem) => (
+                  <option key={classItem.id} value={classItem.id}>
+                    {classItem.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : (
+            <div>
+              <label className="text-sm font-medium text-slate-700">Servidor</label>
+              <select
+                value={employeeId}
+                onChange={(event) => setEmployeeId(event.target.value)}
+                className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
+              >
+                <option value="">Todos os servidores</option>
+                {employees
+                  .filter((employee) => !schoolId || employee.school?.id === schoolId)
+                  .map((employee) => (
+                    <option key={employee.id} value={employee.id}>
+                      {employee.name}
+                    </option>
+                  ))}
+              </select>
+            </div>
+          )}
         </div>
       </div>
 
