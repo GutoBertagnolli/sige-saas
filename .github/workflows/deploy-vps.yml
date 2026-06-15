@@ -30,14 +30,15 @@ jobs:
       - name: Build backend
         working-directory: backend
         run: |
-          npm ci
+          npm install
           npx prisma generate
           npm run build
 
       - name: Build frontend
         working-directory: frontend
         run: |
-          npm ci
+          rm -rf node_modules package-lock.json
+          npm install
           npm run build
 
   deploy:
@@ -83,7 +84,7 @@ jobs:
           git pull --ff-only origin main
 
           cd "$APP_DIR/backend"
-          npm ci
+          npm install
           npx prisma migrate deploy
           npx prisma generate
           npm run build
@@ -96,7 +97,8 @@ jobs:
           pm2 save || true
 
           cd "$APP_DIR/frontend"
-          npm ci
+          rm -rf node_modules package-lock.json
+          npm install
           npm run build
 
           if command -v systemctl >/dev/null 2>&1; then
