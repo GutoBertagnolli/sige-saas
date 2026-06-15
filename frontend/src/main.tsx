@@ -53,7 +53,7 @@ const menu = [
   { label: 'Escolas', path: '/escolas' },
   { label: 'Turmas', path: '/turmas' },
   { label: 'Horários', path: '/horarios' },
-  { label: 'Matérias', path: '/materias' },
+  { label: 'Disciplinas', path: '/disciplinas' },
   { label: 'Servidores', path: '/servidores' },
   { label: 'Afastamentos', path: '/afastamentos' },
   { label: 'Substituições', path: '/substituicoes' },
@@ -312,8 +312,8 @@ function Layout({
   const municipalityName = settings?.municipalityName || 'Prefeitura de Pomerode';
 
   return (
-    <div className="min-h-screen flex bg-slate-50">
-      <aside className="hidden md:flex w-72 bg-slate-900 text-white flex-col p-5">
+    <div className="min-h-screen flex bg-slate-50 print:block print:bg-white">
+      <aside className="hidden md:flex w-72 bg-slate-900 text-white flex-col p-5 print:hidden">
         <div className="mb-8">
           <img
             src={sigeLogoWhite}
@@ -350,8 +350,8 @@ function Layout({
         </div>
       </aside>
 
-      <main className="flex-1 flex min-h-screen min-w-0 flex-col">
-        <header className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b bg-white px-4 py-3 md:px-5 md:py-4">
+      <main className="flex-1 flex min-h-screen min-w-0 flex-col print:block print:min-h-0">
+        <header className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b bg-white px-4 py-3 md:px-5 md:py-4 print:hidden">
           <div className="flex min-w-0 items-center gap-3">
             <button
               type="button"
@@ -439,17 +439,18 @@ function Layout({
   	  <Route path="/escolas" element={<SchoolsPage />} />          
           <Route path="/turmas" element={<ClassesPage />} />
           <Route path="/horarios" element={<TimeTemplatesPage />} />
-          <Route path="/materias" element={<SubjectsPage />} />
+          <Route path="/disciplinas" element={<SubjectsPage />} />
+          <Route path="/materias" element={<Navigate to="/disciplinas" replace />} />
           <Route path="/servidores" element={<EmployeesPage />} />
 	  <Route path="/afastamentos" element={<AbsencesPage />} />          
           <Route path="/substituicoes" element={<SubstitutionsPage />} />
-          <Route path="/relatorios" element={<ReportsPage />} />
+          <Route path="/relatorios" element={<ReportsPage user={user} />} />
           <Route path="/configuracoes" element={<SettingsPage />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
         </div>
 
-        <footer className="border-t bg-white px-5 py-3 text-center text-xs text-slate-500">
+        <footer className="border-t bg-white px-5 py-3 text-center text-xs text-slate-500 print:hidden">
           © 2026 SUPORTIVA LTDA. Todos os direitos reservados. Metodologia, fluxos operacionais e sistema protegidos pela legislação de direitos autorais e propriedade intelectual.
         </footer>
       </main>

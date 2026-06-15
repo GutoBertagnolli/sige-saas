@@ -61,7 +61,7 @@ export default function SubjectsPage() {
       closeModal();
     },
     onError: (error: any) => {
-      alert(error?.response?.data?.message ?? 'Erro ao salvar matéria.');
+      alert(error?.response?.data?.message ?? 'Erro ao salvar disciplina.');
     },
   });
 
@@ -71,7 +71,7 @@ export default function SubjectsPage() {
       await queryClient.invalidateQueries({ queryKey: ['subjects'] });
     },
     onError: (error: any) => {
-      alert(error?.response?.data?.message ?? 'Erro ao excluir matéria.');
+      alert(error?.response?.data?.message ?? 'Erro ao excluir disciplina.');
     },
   });
 
@@ -102,7 +102,7 @@ export default function SubjectsPage() {
 
   function handleSave() {
     if (!name.trim()) {
-      alert('Informe o nome da matéria.');
+      alert('Informe o nome da disciplina.');
       return;
     }
 
@@ -126,9 +126,9 @@ export default function SubjectsPage() {
       <div className="bg-white rounded-2xl shadow-sm border p-6">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-6">
           <div>
-            <h2 className="text-lg font-semibold">Matérias</h2>
+            <h2 className="text-lg font-semibold">Disciplinas</h2>
             <p className="text-sm text-slate-500">
-              Cadastro padronizado das matérias lecionadas pelos professores.
+              Cadastro padronizado das disciplinas lecionadas pelos professores.
             </p>
           </div>
 
@@ -136,7 +136,7 @@ export default function SubjectsPage() {
             onClick={openCreateModal}
             className="bg-slate-900 text-white px-4 py-2 rounded-xl text-sm hover:bg-slate-800"
           >
-            Nova matéria
+            Nova disciplina
           </button>
         </div>
 
@@ -145,7 +145,7 @@ export default function SubjectsPage() {
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             className="w-full md:w-96 border rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-300"
-            placeholder="Buscar matéria..."
+            placeholder="Buscar disciplina..."
           />
         </div>
 
@@ -156,7 +156,7 @@ export default function SubjectsPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b">
-                  <th className="text-left py-3">Matéria</th>
+                  <th className="text-left py-3">Disciplina</th>
                   <th className="text-left py-3">Cor</th>
                   <th className="text-left py-3">Status</th>
                   <th className="text-right py-3">Ações</th>
@@ -198,7 +198,7 @@ export default function SubjectsPage() {
                 {filteredSubjects.length === 0 && (
                   <tr>
                     <td colSpan={4} className="py-6 text-center text-slate-500">
-                      Nenhuma matéria encontrada.
+                      Nenhuma disciplina encontrada.
                     </td>
                   </tr>
                 )}
@@ -212,7 +212,7 @@ export default function SubjectsPage() {
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-xl border w-full max-w-lg p-6">
             <h3 className="text-lg font-semibold mb-1">
-              {editingSubject ? 'Editar matéria' : 'Nova matéria'}
+              {editingSubject ? 'Editar disciplina' : 'Nova disciplina'}
             </h3>
             <p className="text-sm text-slate-500 mb-5">
               Informe o nome padronizado que será usado nos cadastros e relatórios.

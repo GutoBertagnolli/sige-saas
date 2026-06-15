@@ -89,6 +89,11 @@ type RankingRow = {
 
 type ReportType = 'employee' | 'class' | 'absences' | 'substitutions';
 
+type ReportUser = {
+  name: string;
+  email: string;
+};
+
 const REPORT_SECTIONS: Array<{
   id: ReportType;
   label: string;
@@ -97,12 +102,12 @@ const REPORT_SECTIONS: Array<{
   {
     id: 'employee',
     label: 'Professores',
-    description: 'Planner semanal e total de horas por matéria.',
+    description: 'Planner semanal e total de horas por disciplina.',
   },
   {
     id: 'class',
     label: 'Turmas',
-    description: 'Horários por turma, professor e matéria.',
+    description: 'Horários por turma, professor e disciplina.',
   },
   {
     id: 'absences',
@@ -339,7 +344,7 @@ function PlannerTable({ planner }: { planner: EmployeePlanner }) {
                               {schedule.class?.name ?? 'Turma nao informada'}
                             </div>
                             <div className="mt-1 text-[11px]">
-                              {schedule.subject || getEmployeeSubject(planner.employee) || 'Materia nao informada'}
+                              {schedule.subject || getEmployeeSubject(planner.employee) || 'Disciplina nao informada'}
                             </div>
                             {schedule.room && (
                               <div className="mt-1 text-[11px]">
@@ -513,7 +518,7 @@ function ClassPlannerTable({ planner }: { planner: ClassPlanner }) {
                               {schedule.employee.name}
                             </div>
                             <div className="mt-1 text-[11px]">
-                              {schedule.subject || getEmployeeSubject(schedule.employee) || 'Matéria não informada'}
+                              {schedule.subject || getEmployeeSubject(schedule.employee) || 'Disciplina não informada'}
                             </div>
                             {schedule.room && (
                               <div className="mt-1 text-[11px]">
@@ -543,11 +548,12 @@ function ClassPlannerTable({ planner }: { planner: ClassPlanner }) {
   );
 }
 
-export default function ReportsPage() {
+export default function ReportsPage({ user }: { user: ReportUser }) {
   const [schoolId, setSchoolId] = useState('');
   const [employeeId, setEmployeeId] = useState('');
   const [classId, setClassId] = useState('');
   const [reportType, setReportType] = useState<ReportType>('employee');
+  const [generatedAt, setGeneratedAt] = useState(() => new Date());
 
   const { data: employees = [], isLoading: loadingEmployees } = useQuery({
     queryKey: ['employees'],
@@ -792,7 +798,7 @@ export default function ReportsPage() {
     >();
 
     filteredPlanners.forEach((planner) => {
-      const defaultSubject = getEmployeeSubject(planner.employee) || 'Materia nao informada';
+      const defaultSubject = getEmployeeSubject(planner.employee) || 'Disciplina nao informada';
 
       planner.schedules.forEach((schedule) => {
         const subject = schedule.subject || defaultSubject;
@@ -828,6 +834,11 @@ export default function ReportsPage() {
   const currentReport =
     REPORT_SECTIONS.find((section) => section.id === reportType) ??
     REPORT_SECTIONS[0];
+  const generatedDate = generatedAt.toLocaleDateString('pt-BR');
+  const generatedTime = generatedAt.toLocaleTimeString('pt-BR', {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 
   function selectReportType(nextReportType: ReportType) {
     setReportType(nextReportType);
@@ -863,7 +874,10 @@ export default function ReportsPage() {
           </button>
           <button
             type="button"
-            onClick={() => window.print()}
+            onClick={() => {
+              setGeneratedAt(new Date());
+              window.setTimeout(() => window.print(), 0);
+            }}
             className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-3 py-2 text-sm text-white hover:bg-slate-800"
           >
             <Printer className="h-4 w-4" />
@@ -956,10 +970,10 @@ export default function ReportsPage() {
         </div>
       </div>
 
-      <div className="mb-4 hidden print:block">
-        <h1 className="text-lg font-bold">Relatorio de horarios</h1>
+      <div className="mb-4 hidden border-b pb-3 print:block">
+        <h1 className="text-lg font-bold">{currentReport.label}</h1>
         <p className="text-xs text-slate-600">
-          Gerado em {new Date().toLocaleDateString()} - SIGE
+          Relatorio gerado por {user.name} ({user.email}) em {generatedDate} as {generatedTime}
         </p>
       </div>
 
@@ -1058,7 +1072,7 @@ export default function ReportsPage() {
           <section className="rounded-lg border bg-white shadow-sm print:shadow-none">
             <div className="border-b px-4 py-3">
               <h2 className="text-base font-semibold text-slate-950">
-                Professor x horas x materia
+                Professor x horas x disciplina
               </h2>
             </div>
 
@@ -1068,7 +1082,7 @@ export default function ReportsPage() {
                   <tr className="bg-slate-100 text-left text-slate-700">
                     <th className="border-b px-3 py-2">Professor</th>
                     <th className="border-b px-3 py-2">Escola</th>
-                    <th className="border-b px-3 py-2">Materia</th>
+                    <th className="border-b px-3 py-2">Disciplina</th>
                     <th className="border-b px-3 py-2 text-right">Horarios</th>
                     <th className="border-b px-3 py-2 text-right">Total</th>
                   </tr>

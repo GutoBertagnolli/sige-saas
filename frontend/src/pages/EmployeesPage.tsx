@@ -299,7 +299,7 @@ export default function EmployeesPage() {
                   <th className="text-left py-3">CPF</th>
                   <th className="text-left py-3">Escola</th>
                   <th className="text-left py-3">Função</th>
-                  <th className="text-left py-3">Matéria</th>
+                  <th className="text-left py-3">Disciplina</th>
                   <th className="text-left py-3">Telefone</th>
                   <th className="text-left py-3">E-mail</th>
                   <th className="text-left py-3">Login</th>
@@ -441,7 +441,7 @@ export default function EmployeesPage() {
                 </select>
               </div>
               <div>
-                <label className="text-sm font-medium">Matéria lecionada</label>
+                <label className="text-sm font-medium">Disciplina lecionada</label>
                 <select
                   value={subjectId}
                   onChange={(e) => setSubjectId(e.target.value)}

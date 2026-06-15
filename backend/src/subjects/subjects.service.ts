@@ -40,7 +40,7 @@ export class SubjectsService {
     });
 
     if (!firstActiveTenant) {
-      throw new BadRequestException('Nenhum tenant ativo encontrado para cadastrar a matéria.');
+      throw new BadRequestException('Nenhum tenant ativo encontrado para cadastrar a disciplina.');
     }
 
     return firstActiveTenant.id;
@@ -61,7 +61,7 @@ export class SubjectsService {
     const name = data.name?.trim();
 
     if (!name) {
-      throw new BadRequestException('Informe o nome da matéria.');
+      throw new BadRequestException('Informe o nome da disciplina.');
     }
 
     const tenantId = await this.resolveTenantId(data.tenantId);
@@ -84,7 +84,7 @@ export class SubjectsService {
         });
       }
 
-      throw new BadRequestException('Já existe uma matéria cadastrada com este nome.');
+      throw new BadRequestException('Já existe uma disciplina cadastrada com este nome.');
     }
 
     return this.prisma.subject.create({
