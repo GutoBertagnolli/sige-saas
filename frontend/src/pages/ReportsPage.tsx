@@ -27,6 +27,16 @@ type TimeSlot = {
   slotType: string;
 };
 
+type ClassItem = {
+  id: string;
+  name: string;
+  shift?: string;
+  school?: {
+    id: string;
+    name: string;
+  } | null;
+};
+
 type WeeklySchedule = {
   id: string;
   weekday: string;
@@ -44,6 +54,11 @@ type WeeklySchedule = {
 type EmployeePlanner = {
   employee: Employee;
   schedules: WeeklySchedule[];
+};
+
+type ClassPlanner = {
+  classItem: ClassItem;
+  schedules: Array<WeeklySchedule & { employee: Employee }>;
 };
 
 const WEEKDAYS = [
@@ -92,6 +107,11 @@ async function getPlanner(employeeId: string) {
   const response = await api.get<WeeklySchedule[]>(
     `/employee-weekly-schedules/employee/${employeeId}`,
   );
+  return response.data;
+}
+
+async function getClasses() {
+  const response = await api.get<ClassItem[]>('/classes');
   return response.data;
 }
 
@@ -271,13 +291,125 @@ function PlannerTable({ planner }: { planner: EmployeePlanner }) {
   );
 }
 
+function ClassPlannerTable({ planner }: { planner: ClassPlanner }) {
+  const rows = buildPlannerRows(planner.schedules);
+  const scheduleByKey = new Map(
+    planner.schedules.map((schedule) => [getScheduleKey(schedule), schedule]),
+  );
+
+  return (
+    <section className="break-inside-avoid rounded-lg border bg-white shadow-sm print:shadow-none">
+      <div className="flex flex-wrap items-start justify-between gap-2 border-b px-4 py-3">
+        <div>
+          <h2 className="text-base font-semibold text-slate-950">
+            {planner.classItem.name}
+          </h2>
+          <p className="text-xs text-slate-500">
+            {planner.classItem.school?.name ?? 'Sem escola vinculada'}
+          </p>
+        </div>
+
+        <div className="rounded-md border bg-slate-50 px-2 py-1 text-xs font-medium text-slate-600">
+          {planner.schedules.length} horários
+        </div>
+      </div>
+
+      {rows.length > 0 ? (
+        <div className="overflow-auto">
+          <table className="w-full min-w-[920px] border-collapse text-xs">
+            <thead>
+              <tr>
+                <th className="w-36 border-b border-r bg-slate-100 px-3 py-2 text-left font-semibold text-slate-700">
+                  Horário
+                </th>
+                {WEEKDAYS.map((day) => (
+                  <th
+                    key={day.key}
+                    className="border-b border-r bg-slate-100 px-3 py-2 text-center font-semibold text-slate-700 last:border-r-0"
+                  >
+                    {day.label}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((slot, index) => (
+                <tr key={getSlotTimeKey(slot)}>
+                  <td
+                    className={`border-r border-t px-3 py-2 align-middle font-semibold ${
+                      SLOT_STYLES[index % SLOT_STYLES.length]
+                    }`}
+                  >
+                    <div>{getSlotLabel(slot)}</div>
+                    <div className="mt-1 text-[11px] font-normal opacity-75">
+                      {slot.slotType === 'BREAK' ? 'Intervalo' : 'Aula'}
+                    </div>
+                  </td>
+
+                  {WEEKDAYS.map((day) => {
+                    const schedule = scheduleByKey.get(`${day.key}:${getSlotTimeKey(slot)}`);
+                    const typeStyle =
+                      TYPE_STYLES[schedule?.type ?? ''] ??
+                      'border-slate-200 bg-white text-slate-500';
+
+                    return (
+                      <td
+                        key={day.key}
+                        className="h-20 border-r border-t p-2 align-top last:border-r-0"
+                      >
+                        {schedule ? (
+                          <div className={`h-full rounded-md border px-2 py-2 ${typeStyle}`}>
+                            <div className="font-semibold">
+                              {formatType(schedule.type)}
+                            </div>
+                            <div className="mt-1 text-[11px]">
+                              {schedule.employee.name}
+                            </div>
+                            <div className="mt-1 text-[11px]">
+                              {schedule.subject || getEmployeeSubject(schedule.employee) || 'Matéria não informada'}
+                            </div>
+                            {schedule.room && (
+                              <div className="mt-1 text-[11px]">
+                                Sala {schedule.room}
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="flex h-full items-center justify-center rounded-md border border-dashed border-slate-200 bg-slate-50 text-[11px] text-slate-400">
+                            Livre
+                          </div>
+                        )}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className="px-4 py-6 text-sm text-slate-500">
+          Nenhum horário cadastrado para esta turma.
+        </div>
+      )}
+    </section>
+  );
+}
+
 export default function ReportsPage() {
   const [schoolId, setSchoolId] = useState('');
   const [employeeId, setEmployeeId] = useState('');
+  const [classId, setClassId] = useState('');
+  const [reportType, setReportType] = useState<'employee' | 'class'>('employee');
 
   const { data: employees = [], isLoading: loadingEmployees } = useQuery({
     queryKey: ['employees'],
     queryFn: getEmployees,
+  });
+
+  const { data: classes = [], isLoading: loadingClasses } = useQuery({
+    queryKey: ['classes'],
+    queryFn: getClasses,
   });
 
   const {
@@ -320,6 +452,52 @@ export default function ReportsPage() {
     return true;
   });
 
+  const filteredClasses = classes.filter((classItem) => {
+    if (schoolId && classItem.school?.id !== schoolId) return false;
+    return true;
+  });
+
+  const classPlanners = useMemo(() => {
+    const classById = new Map(classes.map((classItem) => [classItem.id, classItem]));
+    const schedulesByClassId = new Map<string, Array<WeeklySchedule & { employee: Employee }>>();
+
+    planners.forEach((planner) => {
+      if (schoolId && planner.employee.school?.id !== schoolId) return;
+      if (employeeId && planner.employee.id !== employeeId) return;
+
+      planner.schedules.forEach((schedule) => {
+        const scheduleClassId = schedule.class?.id;
+
+        if (!scheduleClassId) return;
+        if (classId && scheduleClassId !== classId) return;
+
+        const schedules = schedulesByClassId.get(scheduleClassId) ?? [];
+        schedules.push({
+          ...schedule,
+          employee: planner.employee,
+        });
+        schedulesByClassId.set(scheduleClassId, schedules);
+      });
+    });
+
+    return Array.from(schedulesByClassId.entries())
+      .map(([scheduleClassId, schedules]) => {
+        const classItem =
+          classById.get(scheduleClassId) ??
+          ({
+            id: scheduleClassId,
+            name: schedules[0]?.class?.name ?? 'Turma não informada',
+            school: schedules[0]?.employee.school ?? null,
+          } as ClassItem);
+
+        return {
+          classItem,
+          schedules,
+        };
+      })
+      .sort((a, b) => a.classItem.name.localeCompare(b.classItem.name));
+  }, [classes, planners, schoolId, employeeId, classId]);
+
   const summaryRows = useMemo(() => {
     const rowsByKey = new Map<
       string,
@@ -359,7 +537,7 @@ export default function ReportsPage() {
     );
   }, [filteredPlanners]);
 
-  const loading = loadingEmployees || loadingPlanners;
+  const loading = loadingEmployees || loadingClasses || loadingPlanners;
 
   return (
     <section className="p-5 print:bg-white print:p-0">
@@ -369,7 +547,7 @@ export default function ReportsPage() {
             Relatorio de horarios
           </h1>
           <p className="mt-1 text-sm text-slate-500">
-            Quadro semanal conforme o planner cadastrado de cada professor.
+            Quadros semanais por professor ou por turma, conforme o planner cadastrado.
           </p>
         </div>
 
@@ -394,7 +572,19 @@ export default function ReportsPage() {
         </div>
       </div>
 
-      <div className="mb-5 grid gap-3 rounded-lg border bg-white p-4 shadow-sm md:grid-cols-2 print:hidden">
+      <div className="mb-5 grid gap-3 rounded-lg border bg-white p-4 shadow-sm md:grid-cols-4 print:hidden">
+        <div>
+          <label className="text-sm font-medium text-slate-700">Tipo</label>
+          <select
+            value={reportType}
+            onChange={(event) => setReportType(event.target.value as 'employee' | 'class')}
+            className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
+          >
+            <option value="employee">Por professor</option>
+            <option value="class">Por turma</option>
+          </select>
+        </div>
+
         <div>
           <label className="text-sm font-medium text-slate-700">Escola</label>
           <select
@@ -428,6 +618,22 @@ export default function ReportsPage() {
               ))}
           </select>
         </div>
+
+        <div>
+          <label className="text-sm font-medium text-slate-700">Turma</label>
+          <select
+            value={classId}
+            onChange={(event) => setClassId(event.target.value)}
+            className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
+          >
+            <option value="">Todas as turmas</option>
+            {filteredClasses.map((classItem) => (
+              <option key={classItem.id} value={classItem.id}>
+                {classItem.name}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       <div className="mb-4 hidden print:block">
@@ -441,6 +647,18 @@ export default function ReportsPage() {
         <div className="rounded-lg border bg-white p-5 text-sm text-slate-500">
           Carregando horarios...
         </div>
+      ) : reportType === 'class' ? (
+        classPlanners.length > 0 ? (
+          <div className="grid gap-5">
+            {classPlanners.map((planner) => (
+              <ClassPlannerTable key={planner.classItem.id} planner={planner} />
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-lg border bg-white p-5 text-sm text-slate-500">
+            Nenhum horário de turma encontrado para os filtros selecionados.
+          </div>
+        )
       ) : filteredPlanners.length > 0 ? (
         <div className="grid gap-5">
           <section className="rounded-lg border bg-white shadow-sm print:shadow-none">
