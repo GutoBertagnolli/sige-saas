@@ -76,6 +76,12 @@ function toInputDate(value?: string | null) {
   return new Date(value).toISOString().slice(0, 10);
 }
 
+function isAnnouncementExpired(announcement: Announcement) {
+  if (!announcement.endDate) return false;
+
+  return new Date(announcement.endDate).getTime() < Date.now();
+}
+
 function translateVisibility(value: string) {
   const labels: Record<string, string> = {
     ALL: 'Todos',
@@ -130,6 +136,17 @@ export default function AnnouncementsPage() {
   const { data: accessUsers = [] } = useQuery({
     queryKey: ['settings-access'],
     queryFn: getAccessUsers,
+  });
+
+  const sortedAnnouncements = [...announcements].sort((first, second) => {
+    const firstExpired = isAnnouncementExpired(first) ? 1 : 0;
+    const secondExpired = isAnnouncementExpired(second) ? 1 : 0;
+
+    return (
+      firstExpired - secondExpired ||
+      (first.priority || 0) - (second.priority || 0) ||
+      new Date(second.createdAt || 0).getTime() - new Date(first.createdAt || 0).getTime()
+    );
   });
 
   function resetForm() {
@@ -436,14 +453,26 @@ export default function AnnouncementsPage() {
             </div>
           ) : (
             <div className="grid gap-3">
-              {announcements.map((announcement) => (
+              {sortedAnnouncements.map((announcement) => {
+                const expired = isAnnouncementExpired(announcement);
+
+                return (
                 <article
                   key={announcement.id}
-                  className="rounded-xl border bg-slate-50 p-4"
+                  className={`rounded-xl border p-4 ${
+                    expired ? 'border-red-200 bg-red-50' : 'bg-slate-50'
+                  }`}
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <h3 className="font-semibold">{announcement.title}</h3>
+                      <h3 className="font-semibold">
+                        {announcement.title}
+                        {expired && (
+                          <span className="ml-2 rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-semibold text-red-700">
+                            mensagem vencida
+                          </span>
+                        )}
+                      </h3>
                       <p className="mt-1 whitespace-pre-wrap text-sm text-slate-700">
                         {announcement.message}
                       </p>
@@ -495,7 +524,8 @@ export default function AnnouncementsPage() {
                     </span>
                   </div>
                 </article>
-              ))}
+                );
+              })}
 
               {announcements.length === 0 && (
                 <div className="rounded-xl border bg-slate-50 p-4 text-sm text-slate-500">

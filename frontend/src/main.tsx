@@ -87,6 +87,8 @@ type DashboardAnnouncement = {
   message: string;
   imageUrl?: string | null;
   priority?: number;
+  startDate?: string | null;
+  endDate?: string | null;
   createdBy?: string | null;
   school?: {
     name: string;
@@ -1078,6 +1080,12 @@ function isTodayBetween(startDate?: string, endDate?: string) {
   return start <= endOfToday() && end >= startOfToday();
 }
 
+function isAnnouncementExpired(announcement: DashboardAnnouncement) {
+  if (!announcement.endDate) return false;
+
+  return new Date(announcement.endDate).getTime() < Date.now();
+}
+
 function formatDashboardSchedule(substitution: DashboardSubstitution) {
   const weekday = WEEKDAY_LABELS[String(substitution.weekday || '').toUpperCase()] || 'Hoje';
   const start = substitution.timeSlot?.startTime;
@@ -1139,7 +1147,16 @@ function DashboardHome() {
   );
   const activeSchools = schools.filter((school) => school.active !== false).length;
   const activeEmployees = employees.filter((employee) => employee.active !== false).length;
-  const sortedAnnouncements = [...announcements].sort((first, second) => (second.priority || 0) - (first.priority || 0));
+  const sortedAnnouncements = [...announcements].sort((first, second) => {
+    const firstExpired = isAnnouncementExpired(first) ? 1 : 0;
+    const secondExpired = isAnnouncementExpired(second) ? 1 : 0;
+
+    return (
+      firstExpired - secondExpired ||
+      (first.priority || 0) - (second.priority || 0) ||
+      new Date(second.startDate || 0).getTime() - new Date(first.startDate || 0).getTime()
+    );
+  });
 
   const dashboardCards = [
     {
@@ -1201,12 +1218,26 @@ function DashboardHome() {
             <h2 className="font-semibold">Quadro de mensagens</h2>
           </div>
           <div className="grid gap-3">
-            {sortedAnnouncements.slice(0, 5).map((announcement) => (
+            {sortedAnnouncements.slice(0, 5).map((announcement) => {
+              const expired = isAnnouncementExpired(announcement);
+
+              return (
               <div
                 key={announcement.id}
-                className="rounded-xl bg-white border border-amber-200 p-4 text-sm text-slate-700 shadow-sm"
+                className={`rounded-xl border p-4 text-sm text-slate-700 shadow-sm ${
+                  expired
+                    ? 'border-red-200 bg-red-50'
+                    : 'border-amber-200 bg-white'
+                }`}
               >
-                <div className="font-semibold text-slate-900">{announcement.title}</div>
+                <div className="font-semibold text-slate-900">
+                  {announcement.title}
+                  {expired && (
+                    <span className="ml-2 rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-semibold text-red-700">
+                      mensagem vencida
+                    </span>
+                  )}
+                </div>
                 <div className="mt-1 whitespace-pre-line break-words">{announcement.message}</div>
                 {announcement.imageUrl && (
                   <img
@@ -1222,7 +1253,8 @@ function DashboardHome() {
                   Publicado por {announcement.createdBy || 'Direcao'}
                 </div>
               </div>
-            ))}
+              );
+            })}
 
             {sortedAnnouncements.length === 0 && (
               <div className="rounded-xl bg-white border border-amber-200 p-4 text-sm text-slate-600">
@@ -1264,9 +1296,26 @@ function DashboardHome() {
       {popupStep === 'messages' && (
         <Modal title="Quadro de mensagens" onClose={closeMessagesPopup}>
           <div className="grid max-h-[60vh] gap-3 overflow-auto pr-1">
-            {sortedAnnouncements.map((announcement) => (
-              <div key={announcement.id} className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm">
-                <div className="font-semibold text-slate-900">{announcement.title}</div>
+            {sortedAnnouncements.map((announcement) => {
+              const expired = isAnnouncementExpired(announcement);
+
+              return (
+              <div
+                key={announcement.id}
+                className={`rounded-xl border p-4 text-sm ${
+                  expired
+                    ? 'border-red-200 bg-red-50'
+                    : 'border-amber-200 bg-amber-50'
+                }`}
+              >
+                <div className="font-semibold text-slate-900">
+                  {announcement.title}
+                  {expired && (
+                    <span className="ml-2 rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-semibold text-red-700">
+                      mensagem vencida
+                    </span>
+                  )}
+                </div>
                 <div className="mt-2 whitespace-pre-line break-words text-slate-700">{announcement.message}</div>
                 {announcement.imageUrl && (
                   <img
@@ -1279,7 +1328,8 @@ function DashboardHome() {
                   {announcement.school?.name ?? 'Todas as escolas'} - Publicado por {announcement.createdBy || 'Direcao'}
                 </div>
               </div>
-            ))}
+              );
+            })}
 
             {sortedAnnouncements.length === 0 && (
               <div className="rounded-xl border bg-slate-50 p-4 text-sm text-slate-600">

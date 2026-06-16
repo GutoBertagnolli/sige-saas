@@ -281,10 +281,12 @@ export class AnnouncementsService {
         FROM "Announcement" a
         LEFT JOIN "School" s ON s.id = a."schoolId"
         WHERE (a."startDate" IS NULL OR a."startDate" <= now())
-          AND (a."endDate" IS NULL OR a."endDate" >= now())
           AND (${filters?.schoolId ?? null}::text IS NULL OR a."schoolId" IS NULL OR a."schoolId" = ${filters?.schoolId ?? null})
           AND (${roleType ?? null}::text IS NULL OR a."targetRoleType" IS NULL OR a."targetRoleType"::text = ${roleType ?? null})
-        ORDER BY a.priority ASC, a."createdAt" DESC
+        ORDER BY
+          CASE WHEN a."endDate" IS NOT NULL AND a."endDate" < now() THEN 1 ELSE 0 END ASC,
+          a.priority ASC,
+          a."createdAt" DESC
       `;
 
       return this.mapRows(rows);
@@ -308,9 +310,10 @@ export class AnnouncementsService {
       FROM "Announcement" a
       LEFT JOIN "School" s ON s.id = a."schoolId"
       WHERE (a."startDate" IS NULL OR a."startDate" <= now())
-        AND (a."endDate" IS NULL OR a."endDate" >= now())
         AND (${filters?.schoolId ?? null}::text IS NULL OR a."schoolId" IS NULL OR a."schoolId" = ${filters?.schoolId ?? null})
-      ORDER BY a."createdAt" DESC
+      ORDER BY
+        CASE WHEN a."endDate" IS NOT NULL AND a."endDate" < now() THEN 1 ELSE 0 END ASC,
+        a."createdAt" DESC
     `;
 
     return this.mapRows(rows);
