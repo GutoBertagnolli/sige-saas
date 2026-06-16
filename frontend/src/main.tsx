@@ -1086,6 +1086,12 @@ function isAnnouncementExpired(announcement: DashboardAnnouncement) {
   return new Date(announcement.endDate).getTime() < Date.now();
 }
 
+function formatAnnouncementExpiredDate(announcement: DashboardAnnouncement) {
+  if (!announcement.endDate) return '';
+
+  return new Date(announcement.endDate).toLocaleDateString('pt-BR');
+}
+
 function formatDashboardSchedule(substitution: DashboardSubstitution) {
   const weekday = WEEKDAY_LABELS[String(substitution.weekday || '').toUpperCase()] || 'Hoje';
   const start = substitution.timeSlot?.startTime;
@@ -1234,7 +1240,7 @@ function DashboardHome() {
                   {announcement.title}
                   {expired && (
                     <span className="ml-2 rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-semibold text-red-700">
-                      mensagem vencida
+                      Esta mensagem venceu em {formatAnnouncementExpiredDate(announcement)}
                     </span>
                   )}
                 </div>
@@ -1312,7 +1318,7 @@ function DashboardHome() {
                   {announcement.title}
                   {expired && (
                     <span className="ml-2 rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-semibold text-red-700">
-                      mensagem vencida
+                      Esta mensagem venceu em {formatAnnouncementExpiredDate(announcement)}
                     </span>
                   )}
                 </div>

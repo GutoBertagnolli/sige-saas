@@ -82,6 +82,12 @@ function isAnnouncementExpired(announcement: Announcement) {
   return new Date(announcement.endDate).getTime() < Date.now();
 }
 
+function formatAnnouncementExpiredDate(announcement: Announcement) {
+  if (!announcement.endDate) return '';
+
+  return new Date(announcement.endDate).toLocaleDateString('pt-BR');
+}
+
 function translateVisibility(value: string) {
   const labels: Record<string, string> = {
     ALL: 'Todos',
@@ -469,7 +475,7 @@ export default function AnnouncementsPage() {
                         {announcement.title}
                         {expired && (
                           <span className="ml-2 rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-semibold text-red-700">
-                            mensagem vencida
+                            Esta mensagem venceu em {formatAnnouncementExpiredDate(announcement)}
                           </span>
                         )}
                       </h3>
