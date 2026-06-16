@@ -1,9 +1,13 @@
 import { Body, Controller, Delete, Get, Headers, Param, Post, Put, Query } from '@nestjs/common';
+import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { AnnouncementsService } from './announcements.service';
 
 @Controller('announcements')
 export class AnnouncementsController {
-  constructor(private readonly service: AnnouncementsService) {}
+  constructor(
+    private readonly service: AnnouncementsService,
+    private readonly audit: AuditLogsService,
+  ) {}
 
   @Get()
   findAll() {
@@ -19,17 +23,23 @@ export class AnnouncementsController {
   }
 
   @Post()
-  create(@Body() body: any, @Headers('authorization') authorization?: string) {
-    return this.service.create(body, authorization);
+  async create(@Body() body: any, @Headers('authorization') authorization?: string) {
+    const result = await this.service.create(body, authorization);
+    await this.audit.record({ authorization, entity: 'Aviso', entityId: result?.id, action: 'CREATE', newData: result });
+    return result;
   }
 
   @Put(':id')
-  update(@Param('id') id: string, @Body() body: any, @Headers('authorization') authorization?: string) {
-    return this.service.update(id, body, authorization);
+  async update(@Param('id') id: string, @Body() body: any, @Headers('authorization') authorization?: string) {
+    const result = await this.service.update(id, body, authorization);
+    await this.audit.record({ authorization, entity: 'Aviso', entityId: id, action: 'UPDATE', oldData: body, newData: result });
+    return result;
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.service.remove(id);
+  async remove(@Param('id') id: string, @Headers('authorization') authorization?: string) {
+    const result = await this.service.remove(id);
+    await this.audit.record({ authorization, entity: 'Aviso', entityId: id, action: 'DELETE', newData: result });
+    return result;
   }
 }

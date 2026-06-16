@@ -14,6 +14,7 @@ import SettingsPage from './pages/SettingsPage';
 import AnnouncementsPage from './pages/AnnouncementsPage';
 import PortalPage from './pages/PortalPage';
 import ReportsPage from './pages/ReportsPage';
+import AuditLogsPage from './pages/AuditLogsPage';
 import SubjectsPage from './pages/SubjectsPage';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
@@ -47,7 +48,7 @@ import sigeLogoWhite from './assets/sige-logo-white.png';
 import { APP_VERSION } from './version';
 import { api, clearAuthToken, setAuthToken } from './services/api';
 
-const menu = [
+const baseMenu = [
   { label: 'Dashboard', path: '/dashboard' },
   { label: 'Mensagens', path: '/mensagens' },
   { label: 'Escolas', path: '/escolas' },
@@ -293,6 +294,10 @@ function canAccessAdmin(user: AuthUser) {
   return ADMIN_ROLES.includes(normalizeRole(user));
 }
 
+function canViewAuditLogs(user: AuthUser) {
+  return ['SECRETARIA', 'ADMIN', 'ADMINISTRADOR'].includes(normalizeRole(user));
+}
+
 function Layout({
   user,
   onLogout,
@@ -303,13 +308,20 @@ function Layout({
   onUserUpdate: (user: AuthUser) => void;
 }) {
   const location = useLocation();
-  const current = menu.find((item) => item.path === location.pathname);
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
   const { data: settings } = useQuery({
     queryKey: ['settings'],
     queryFn: getSystemSettings,
   });
   const municipalityName = settings?.municipalityName || 'Prefeitura de Pomerode';
+  const menu = React.useMemo(
+    () =>
+      canViewAuditLogs(user)
+        ? [...baseMenu, { label: 'Logs', path: '/logs' }]
+        : baseMenu,
+    [user],
+  );
+  const current = menu.find((item) => item.path === location.pathname);
 
   return (
     <div className="min-h-screen flex bg-slate-50 print:block print:bg-white">
@@ -349,6 +361,9 @@ function Layout({
           {municipalityName}
         </div>
       </aside>
+      <div className="fixed bottom-2 left-4 z-40 rounded-md bg-slate-900/85 px-2 py-1 text-xs text-white shadow-sm print:hidden">
+        {municipalityName}
+      </div>
 
       <main className="flex-1 flex min-h-screen min-w-0 flex-col print:block print:min-h-0">
         <header className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b bg-white px-4 py-3 md:px-5 md:py-4 print:hidden">
@@ -445,6 +460,7 @@ function Layout({
 	  <Route path="/afastamentos" element={<AbsencesPage />} />          
           <Route path="/substituicoes" element={<SubstitutionsPage />} />
           <Route path="/relatorios" element={<ReportsPage user={user} />} />
+          {canViewAuditLogs(user) && <Route path="/logs" element={<AuditLogsPage />} />}
           <Route path="/configuracoes" element={<SettingsPage />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>

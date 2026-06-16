@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Headers, Post, Put } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Ip, Post, Put } from '@nestjs/common';
 import { IsEmail, IsOptional, IsString, MinLength } from 'class-validator';
 import { AuthService } from './auth.service';
 
@@ -24,8 +24,8 @@ export class AuthController {
   constructor(private auth: AuthService) {}
 
   @Post('login')
-  login(@Body() dto: LoginDto) {
-    return this.auth.login(dto.email, dto.password, dto.tenantSlug);
+  login(@Body() dto: LoginDto, @Ip() ipAddress?: string) {
+    return this.auth.login(dto.email, dto.password, dto.tenantSlug, ipAddress);
   }
 
   @Get('me')

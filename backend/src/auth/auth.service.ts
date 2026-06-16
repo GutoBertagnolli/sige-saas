@@ -18,7 +18,7 @@ export class AuthService {
     };
   }
 
-  async login(email: string, password: string, tenantSlug: string) {
+  async login(email: string, password: string, tenantSlug: string, ipAddress?: string) {
     const tenant = await this.prisma.tenant.findUnique({ where: { slug: tenantSlug } });
     if (!tenant || !tenant.active) throw new UnauthorizedException('Cliente inválido ou inativo');
 
@@ -39,6 +39,19 @@ export class AuthService {
     if (!ok) throw new UnauthorizedException('Usuário ou senha inválidos');
 
     await this.prisma.user.update({ where: { id: user.id }, data: { lastLogin: new Date() } });
+    await this.prisma.auditLog.create({
+      data: {
+        userId: user.id,
+        entity: 'Auth',
+        entityId: user.id,
+        action: 'LOGIN',
+        newData: {
+          email: user.email,
+          name: user.name,
+        },
+        ipAddress: ipAddress || null,
+      },
+    });
     const token = this.jwt.sign({ sub: user.id, tenantId: tenant.id, roleId: user.roleId, email: user.email });
     return {
       token,

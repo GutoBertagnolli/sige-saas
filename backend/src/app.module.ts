@@ -15,10 +15,12 @@ import { TimeTemplatesModule } from './time-templates/time-templates.module';
 import { SettingsModule } from './settings/settings.module';
 import { AnnouncementsModule } from './announcements/announcements.module';
 import { SubjectsModule } from './subjects/subjects.module';
+import { AuditLogsModule } from './audit-logs/audit-logs.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    AuditLogsModule,
     AvailabilityModule,
     AnnouncementsModule,
     EmployeeWeeklySchedulesModule,
