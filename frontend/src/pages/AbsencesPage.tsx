@@ -187,7 +187,7 @@ const tabs: Array<{ id: AbsenceTab; label: string }> = [
   { id: 'cadastro', label: 'Cadastro de afastamento' },
   { id: 'sugestoes', label: 'Sugestao de substituicao' },
   { id: 'substituicoes', label: 'Substituicoes efetuadas' },
-  { id: 'historico', label: 'Historico' },
+  { id: 'historico', label: 'Consulta por servidor' },
 ];
 
 function translateWeekday(value?: string | null) {
@@ -297,6 +297,7 @@ export default function AbsencesPage() {
   const [now, setNow] = useState(Date.now());
   const [editingAbsence, setEditingAbsence] = useState<Absence | null>(null);
   const [substitutionEmployeeFilter, setSubstitutionEmployeeFilter] = useState('');
+  const [historyEmployeeId, setHistoryEmployeeId] = useState('');
 
   useEffect(() => {
     const intervalId = window.setInterval(() => {
@@ -386,6 +387,25 @@ export default function AbsencesPage() {
 
     return Array.from(options.entries()).map(([id, name]) => ({ id, name }));
   }, [allSubstitutions]);
+
+  const historyAbsences = useMemo(() => {
+    if (!historyEmployeeId) {
+      return absences;
+    }
+
+    return absences.filter(
+      (absence) =>
+        (absence.employeeId || absence.employee?.id) === historyEmployeeId,
+    );
+  }, [absences, historyEmployeeId]);
+
+  const selectedHistoryEmployee = employees.find(
+    (employee) => employee.id === historyEmployeeId,
+  );
+
+  const historyDocumentCount = historyAbsences.filter(
+    (absence) => Boolean(absence.documentUrl),
+  ).length;
 
   const substitutionMutation = useMutation({
     mutationFn: createSubstitution,
@@ -836,83 +856,134 @@ export default function AbsencesPage() {
         )}
 
         {activeTab === 'historico' && (
-          <div className="overflow-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b">
-                  <th className="text-left py-3">Servidor</th>
-                  <th className="text-left py-3">Funcao</th>
-                  <th className="text-left py-3">Escola</th>
-                  <th className="text-left py-3">Inicio</th>
-                  <th className="text-left py-3">Fim</th>
-                  <th className="text-left py-3">Motivo</th>
-                  <th className="text-left py-3">Documento</th>
-                  <th className="text-left py-3">Situacao</th>
-                  <th className="text-left py-3">Substituicoes</th>
-                  <th className="text-left py-3">Acoes</th>
-                </tr>
-              </thead>
+          <div className="space-y-5">
+            <div className="rounded-xl border bg-slate-50 p-4">
+              <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+                <div>
+                  <label className="text-sm font-medium">Servidor</label>
+                  <select
+                    value={historyEmployeeId}
+                    onChange={(event) => setHistoryEmployeeId(event.target.value)}
+                    className="mt-1 w-full rounded-xl border bg-white px-3 py-2 text-sm"
+                  >
+                    <option value="">Todos os servidores</option>
+                    {employees.map((employee) => (
+                      <option key={employee.id} value={employee.id}>
+                        {employee.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
 
-              <tbody>
-                {absences.map((absence) => (
-                  <tr key={absence.id} className="border-b">
-                    <td className="py-3">{absence.employee?.name}</td>
-                    <td className="py-3">{translateRole(absence.employee?.roleType)}</td>
-                    <td className="py-3">{absence.employee?.school?.name || '-'}</td>
-                    <td className="py-3">{new Date(absence.startDate).toLocaleDateString()}</td>
-                    <td className="py-3">{new Date(absence.endDate).toLocaleDateString()}</td>
-                    <td className="py-3">{absence.reason}</td>
-                    <td className="py-3">
-                      {absence.documentUrl ? (
-                        <a
-                          href={absence.documentUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-xs font-medium text-slate-900 underline"
-                        >
-                          Visualizar
-                        </a>
-                      ) : (
-                        '-'
-                      )}
-                    </td>
-                    <td className="py-3">{translateStatus(absence.status)}</td>
-                    <td className="py-3">{absence.substitutions?.length ?? 0}</td>
-                    <td className="py-3">
-                      <div className="flex flex-wrap gap-2">
-                        <button
-                          onClick={() => handleEditAbsence(absence)}
-                          className="px-3 py-1 rounded-lg border text-xs hover:bg-slate-50"
-                        >
-                          Editar
-                        </button>
-                        <button
-                          onClick={() => loadReplacementSuggestions(absence)}
-                          className="px-3 py-1 rounded-lg border text-xs hover:bg-slate-50"
-                        >
-                          Gerar sugestoes
-                        </button>
-                        <button
-                          onClick={() => handleDeleteAbsence(absence)}
-                          disabled={deleteAbsenceMutation.isPending}
-                          className="px-3 py-1 rounded-lg border border-red-200 text-xs text-red-700 hover:bg-red-50 disabled:opacity-60"
-                        >
-                          Apagar
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                <button
+                  type="button"
+                  onClick={() => setHistoryEmployeeId('')}
+                  className="rounded-xl border bg-white px-4 py-2 text-sm hover:bg-slate-50"
+                >
+                  Limpar filtro
+                </button>
+              </div>
 
-                {absences.length === 0 && (
-                  <tr>
-                    <td colSpan={10} className="py-6 text-center text-slate-500">
-                      Nenhum afastamento cadastrado.
-                    </td>
+              <div className="mt-4 grid gap-3 text-sm md:grid-cols-3">
+                <div className="rounded-xl border bg-white p-3">
+                  <div className="text-xs text-slate-500">Servidor consultado</div>
+                  <div className="mt-1 font-semibold text-slate-950">
+                    {selectedHistoryEmployee?.name ?? 'Todos'}
+                  </div>
+                </div>
+                <div className="rounded-xl border bg-white p-3">
+                  <div className="text-xs text-slate-500">Afastamentos encontrados</div>
+                  <div className="mt-1 text-xl font-semibold text-slate-950">
+                    {historyAbsences.length}
+                  </div>
+                </div>
+                <div className="rounded-xl border bg-white p-3">
+                  <div className="text-xs text-slate-500">Documentos anexados</div>
+                  <div className="mt-1 text-xl font-semibold text-slate-950">
+                    {historyDocumentCount}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="overflow-auto">
+              <table className="w-full min-w-[980px] text-sm">
+                <thead>
+                  <tr className="border-b bg-slate-50">
+                    <th className="text-left py-3 px-3">Servidor</th>
+                    <th className="text-left py-3 px-3">Funcao</th>
+                    <th className="text-left py-3 px-3">Escola</th>
+                    <th className="text-left py-3 px-3">Inicio</th>
+                    <th className="text-left py-3 px-3">Fim</th>
+                    <th className="text-left py-3 px-3">Motivo</th>
+                    <th className="text-left py-3 px-3">Documento</th>
+                    <th className="text-left py-3 px-3">Situacao</th>
+                    <th className="text-left py-3 px-3">Substituicoes</th>
+                    <th className="text-left py-3 px-3">Acoes</th>
                   </tr>
-                )}
-              </tbody>
-            </table>
+                </thead>
+
+                <tbody>
+                  {historyAbsences.map((absence) => (
+                    <tr key={absence.id} className="border-b last:border-b-0">
+                      <td className="py-3 px-3 font-medium">{absence.employee?.name}</td>
+                      <td className="py-3 px-3">{translateRole(absence.employee?.roleType)}</td>
+                      <td className="py-3 px-3">{absence.employee?.school?.name || '-'}</td>
+                      <td className="py-3 px-3">{new Date(absence.startDate).toLocaleDateString()}</td>
+                      <td className="py-3 px-3">{new Date(absence.endDate).toLocaleDateString()}</td>
+                      <td className="py-3 px-3">{absence.reason}</td>
+                      <td className="py-3 px-3">
+                        {absence.documentUrl ? (
+                          <a
+                            href={absence.documentUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex rounded-lg border px-3 py-1.5 text-xs font-medium text-slate-900 hover:bg-slate-50"
+                          >
+                            Visualizar documento
+                          </a>
+                        ) : (
+                          <span className="text-slate-400">Sem documento</span>
+                        )}
+                      </td>
+                      <td className="py-3 px-3">{translateStatus(absence.status)}</td>
+                      <td className="py-3 px-3">{absence.substitutions?.length ?? 0}</td>
+                      <td className="py-3 px-3">
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            onClick={() => handleEditAbsence(absence)}
+                            className="px-3 py-1 rounded-lg border text-xs hover:bg-slate-50"
+                          >
+                            Editar
+                          </button>
+                          <button
+                            onClick={() => loadReplacementSuggestions(absence)}
+                            className="px-3 py-1 rounded-lg border text-xs hover:bg-slate-50"
+                          >
+                            Gerar sugestoes
+                          </button>
+                          <button
+                            onClick={() => handleDeleteAbsence(absence)}
+                            disabled={deleteAbsenceMutation.isPending}
+                            className="px-3 py-1 rounded-lg border border-red-200 text-xs text-red-700 hover:bg-red-50 disabled:opacity-60"
+                          >
+                            Apagar
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+
+                  {historyAbsences.length === 0 && (
+                    <tr>
+                      <td colSpan={10} className="py-6 text-center text-slate-500">
+                        Nenhum afastamento encontrado para a consulta.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </div>
