@@ -16,6 +16,7 @@ import PortalPage from './pages/PortalPage';
 import ReportsPage from './pages/ReportsPage';
 import AuditLogsPage from './pages/AuditLogsPage';
 import SubjectsPage from './pages/SubjectsPage';
+import LayoutPreviewPage from './pages/LayoutPreviewPage';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import {
@@ -59,6 +60,7 @@ const baseMenu = [
   { label: 'Afastamentos', path: '/afastamentos' },
   { label: 'Substituições', path: '/substituicoes' },
   { label: 'Relatórios', path: '/relatorios' },
+  { label: 'Previa layout', path: '/preview-layout' },
   { label: 'Configurações', path: '/configuracoes' },
 ];
 
@@ -462,6 +464,7 @@ function Layout({
 	  <Route path="/afastamentos" element={<AbsencesPage />} />          
           <Route path="/substituicoes" element={<SubstitutionsPage />} />
           <Route path="/relatorios" element={<ReportsPage user={user} />} />
+          <Route path="/preview-layout" element={<LayoutPreviewPage />} />
           {canViewAuditLogs(user) && <Route path="/logs" element={<AuditLogsPage />} />}
           <Route path="/configuracoes" element={<SettingsPage />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
