@@ -23,44 +23,20 @@ function firstHeaderValue(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
 }
 
-function splitIpCandidates(...values: Array<string | null | undefined>) {
-  return values
-    .flatMap((value) => (value || '').split(','))
-    .map((value) => value.trim().replace(/^::ffff:/, ''))
-    .filter(Boolean);
-}
-
-function isIpv4(value: string) {
-  const parts = value.split('.');
-
-  return (
-    parts.length === 4 &&
-    parts.every((part) => {
-      if (!/^\d+$/.test(part)) return false;
-      const number = Number(part);
-      return number >= 0 && number <= 255;
-    })
-  );
-}
-
 function normalizeIpAddress(value?: string | null) {
   if (!value) return null;
 
-  const candidates = splitIpCandidates(value);
-  return candidates.find(isIpv4) || candidates[0] || null;
+  return value.split(',')[0].trim().replace(/^::ffff:/, '') || null;
 }
 
 function getClientIp(request: any) {
-  return normalizeIpAddress(
-    [
-      firstHeaderValue(request.headers?.['cf-connecting-ip']),
-      firstHeaderValue(request.headers?.['x-real-ip']),
-      firstHeaderValue(request.headers?.['x-forwarded-for']),
-      request.ip,
-      request.socket?.remoteAddress,
-    ]
-      .filter(Boolean)
-      .join(','),
+  return (
+    normalizeIpAddress(firstHeaderValue(request.headers?.['cf-connecting-ip'])) ||
+    normalizeIpAddress(firstHeaderValue(request.headers?.['true-client-ip'])) ||
+    normalizeIpAddress(firstHeaderValue(request.headers?.['x-real-ip'])) ||
+    normalizeIpAddress(firstHeaderValue(request.headers?.['x-forwarded-for'])) ||
+    normalizeIpAddress(request.ip) ||
+    normalizeIpAddress(request.socket?.remoteAddress)
   );
 }
 
