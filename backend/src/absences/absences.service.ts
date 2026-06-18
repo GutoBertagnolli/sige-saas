@@ -19,7 +19,9 @@ export class AbsencesService {
 
     await this.prisma.substitution.updateMany({
       where: {
-        status: SubstitutionStatus.PENDING_DIRECTOR,
+        status: {
+          in: [SubstitutionStatus.PENDING_DIRECTOR, SubstitutionStatus.SENT_TO_TEACHER],
+        },
         acceptedAt: null,
         createdAt: {
           lte: expiresBefore,

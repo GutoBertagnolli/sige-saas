@@ -7,6 +7,7 @@ import {
 import { SubstitutionStatus, Weekday } from '@prisma/client';
 import { PrismaService } from '../common/prisma.service';
 import { SettingsService } from '../settings/settings.service';
+import { WhatsAppNotificationsService } from '../whatsapp/whatsapp-notifications.service';
 
 type CreateSubstitutionInput = {
   absenceId?: string;
@@ -24,6 +25,7 @@ export class SubstitutionsService {
   constructor(
     private prisma: PrismaService,
     private settings: SettingsService,
+    private whatsapp: WhatsAppNotificationsService,
   ) {}
 
   private async autoAcceptExpired() {
@@ -35,7 +37,9 @@ export class SubstitutionsService {
 
     await this.prisma.substitution.updateMany({
       where: {
-        status: SubstitutionStatus.PENDING_DIRECTOR,
+        status: {
+          in: [SubstitutionStatus.PENDING_DIRECTOR, SubstitutionStatus.SENT_TO_TEACHER],
+        },
         acceptedAt: null,
         createdAt: {
           lte: expiresBefore,
@@ -320,7 +324,10 @@ export class SubstitutionsService {
       return created;
     });
 
-    return this.attachTeachers(substitution);
+    const result = await this.attachTeachers(substitution);
+    const whatsappSent = await this.whatsapp.sendSubstitutionRequest(result);
+
+    return whatsappSent ? { ...result, status: SubstitutionStatus.SENT_TO_TEACHER } : result;
   }
 
   async accept(id: string) {

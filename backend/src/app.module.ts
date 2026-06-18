@@ -16,6 +16,7 @@ import { SettingsModule } from './settings/settings.module';
 import { AnnouncementsModule } from './announcements/announcements.module';
 import { SubjectsModule } from './subjects/subjects.module';
 import { AuditLogsModule } from './audit-logs/audit-logs.module';
+import { WhatsAppModule } from './whatsapp/whatsapp.module';
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { AuditLogsModule } from './audit-logs/audit-logs.module';
     SubjectsModule,
     TimeTemplatesModule,
     EmployeesModule,
+    WhatsAppModule,
   ],
 })
 export class AppModule {}
