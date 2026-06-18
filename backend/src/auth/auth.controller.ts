@@ -1,5 +1,6 @@
 import { Body, Controller, Get, Headers, Post, Put, Req } from '@nestjs/common';
 import { IsEmail, IsOptional, IsString, MinLength } from 'class-validator';
+import { getClientIp } from '../common/client-ip';
 import { AuthService } from './auth.service';
 
 class LoginDto {
@@ -17,27 +18,6 @@ class UpdateProfileDto {
 class UpdatePasswordDto {
   @IsString() currentPassword: string;
   @IsString() @MinLength(6) newPassword: string;
-}
-
-function firstHeaderValue(value: string | string[] | undefined) {
-  return Array.isArray(value) ? value[0] : value;
-}
-
-function normalizeIpAddress(value?: string | null) {
-  if (!value) return null;
-
-  return value.split(',')[0].trim().replace(/^::ffff:/, '') || null;
-}
-
-function getClientIp(request: any) {
-  return (
-    normalizeIpAddress(firstHeaderValue(request.headers?.['cf-connecting-ip'])) ||
-    normalizeIpAddress(firstHeaderValue(request.headers?.['true-client-ip'])) ||
-    normalizeIpAddress(firstHeaderValue(request.headers?.['x-real-ip'])) ||
-    normalizeIpAddress(firstHeaderValue(request.headers?.['x-forwarded-for'])) ||
-    normalizeIpAddress(request.ip) ||
-    normalizeIpAddress(request.socket?.remoteAddress)
-  );
 }
 
 @Controller('auth')
