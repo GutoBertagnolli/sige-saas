@@ -1168,6 +1168,9 @@ function DashboardHome({ user }: { user: AuthUser }) {
       new Date(second.startDate || 0).getTime() - new Date(first.startDate || 0).getTime()
     );
   });
+  const popupAnnouncements = sortedAnnouncements.filter(
+    (announcement) => !isAnnouncementExpired(announcement),
+  );
 
   const dashboardCards = [
     {
@@ -1200,7 +1203,7 @@ function DashboardHome({ user }: { user: AuthUser }) {
     if (sessionStorage.getItem(DASHBOARD_POPUP_KEY) !== '1') return;
     if (!announcementsFetched || !substitutionsFetched) return;
 
-    if (sortedAnnouncements.length > 0) {
+    if (popupAnnouncements.length > 0) {
       setPopupStep('messages');
       return;
     }
@@ -1212,7 +1215,7 @@ function DashboardHome({ user }: { user: AuthUser }) {
 
     sessionStorage.removeItem(DASHBOARD_POPUP_KEY);
     setPopupStep('none');
-  }, [announcementsFetched, substitutionsFetched, sortedAnnouncements.length, todaySubstitutions.length]);
+  }, [announcementsFetched, substitutionsFetched, popupAnnouncements.length, todaySubstitutions.length]);
 
   function closeMessagesPopup() {
     if (todaySubstitutions.length > 0) {
@@ -1330,7 +1333,7 @@ function DashboardHome({ user }: { user: AuthUser }) {
       {popupStep === 'messages' && (
         <Modal title="Quadro de mensagens" onClose={closeMessagesPopup}>
           <div className="grid max-h-[60vh] gap-3 overflow-auto pr-1">
-            {sortedAnnouncements.map((announcement) => {
+            {popupAnnouncements.map((announcement) => {
               const expired = isAnnouncementExpired(announcement);
 
               return (
@@ -1365,7 +1368,7 @@ function DashboardHome({ user }: { user: AuthUser }) {
               );
             })}
 
-            {sortedAnnouncements.length === 0 && (
+            {popupAnnouncements.length === 0 && (
               <div className="rounded-xl border bg-slate-50 p-4 text-sm text-slate-600">
                 Nenhuma mensagem disponivel.
               </div>
