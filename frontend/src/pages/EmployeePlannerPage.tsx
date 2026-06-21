@@ -69,6 +69,7 @@ type LocalCell = {
 };
 
 const TENANT_ID = 'd48a9959-685e-4dc7-8af4-a156e9cfa9ac';
+const ALL_TEMPLATES_ID = '__ALL_TEMPLATES__';
 
 const WEEKDAYS = [
   { key: 'MONDAY', label: 'Segunda' },
@@ -104,6 +105,20 @@ function getSlotTimeKey(slot?: { startTime?: string | null; endTime?: string | n
   return slot?.startTime && slot.endTime ? `${slot.startTime}-${slot.endTime}` : '';
 }
 
+function sortSlotsByTime(slots: Slot[]) {
+  return [...slots].sort(
+    (first, second) =>
+      getSlotMinutes(first.startTime) - getSlotMinutes(second.startTime) ||
+      getSlotMinutes(first.endTime) - getSlotMinutes(second.endTime) ||
+      first.slotOrder - second.slotOrder,
+  );
+}
+
+function getSlotMinutes(time: string) {
+  const [hours = '0', minutes = '0'] = time.split(':');
+  return Number(hours) * 60 + Number(minutes);
+}
+
 async function getEmployees() {
   const response = await api.get<Employee[]>('/employees');
   return response.data;
@@ -135,7 +150,7 @@ export default function EmployeePlannerPage() {
   const { employeeId = '' } = useParams();
   const queryClient = useQueryClient();
 
-  const [selectedTemplateId, setSelectedTemplateId] = useState('');
+  const [selectedTemplateId, setSelectedTemplateId] = useState(ALL_TEMPLATES_ID);
   const [defaultClassId, setDefaultClassId] = useState('');
   const [defaultType, setDefaultType] = useState('AULA');
   const [localCells, setLocalCells] = useState<LocalCell[]>([]);
@@ -166,16 +181,16 @@ export default function EmployeePlannerPage() {
   const employee = employees.find((item) => item.id === employeeId);
   const employeeSubject = getEmployeeSubject(employee);
 
+  const isAllTemplatesSelected = selectedTemplateId === ALL_TEMPLATES_ID;
+
   const selectedTemplate = useMemo(() => {
-    if (selectedTemplateId) {
+    if (selectedTemplateId && selectedTemplateId !== ALL_TEMPLATES_ID) {
       return templates.find((item) => item.id === selectedTemplateId);
     }
 
-    const integralTemplate = templates.find((item) => item.shift === 'INTEGRAL');
-    return integralTemplate || templates[0];
+    return undefined;
   }, [templates, selectedTemplateId]);
 
-  const slots = selectedTemplate?.slots || [];
   const allSlotsById = useMemo(() => {
     const map = new Map<string, Slot>();
 
@@ -187,6 +202,52 @@ export default function EmployeePlannerPage() {
 
     return map;
   }, [templates]);
+  const allTemplateSlots = useMemo(() => {
+    const slotsByTime = new Map<string, Slot>();
+
+    templates.forEach((template) => {
+      template.slots.forEach((slot) => {
+        const key = getSlotTimeKey(slot) || slot.id;
+        const current = slotsByTime.get(key);
+
+        if (!current || slot.slotOrder < current.slotOrder) {
+          slotsByTime.set(key, slot);
+        }
+      });
+    });
+
+    return sortSlotsByTime(Array.from(slotsByTime.values()));
+  }, [templates]);
+  const savedPlannerSlots = useMemo(() => {
+    const slotsByTime = new Map<string, Slot>();
+
+    localCells.forEach((cell) => {
+      const existingSlot = allSlotsById.get(cell.timeSlotId);
+      const [startTime = '', endTime = ''] = cell.slotTimeKey.split('-');
+      const fallbackSlot: Slot = {
+        id: cell.timeSlotId,
+        startTime,
+        endTime,
+        slotOrder: getSlotMinutes(startTime),
+        slotType: 'CLASS',
+        requiresSubstitution: cell.requiresSubstitution,
+      };
+      const slot = existingSlot ?? fallbackSlot;
+      const key = getSlotTimeKey(slot) || cell.timeSlotId;
+      const current = slotsByTime.get(key);
+
+      if (!current || slot.slotOrder < current.slotOrder) {
+        slotsByTime.set(key, slot);
+      }
+    });
+
+    return sortSlotsByTime(Array.from(slotsByTime.values()));
+  }, [allSlotsById, localCells]);
+  const slots = isAllTemplatesSelected
+    ? savedPlannerSlots.length > 0
+      ? savedPlannerSlots
+      : allTemplateSlots
+    : selectedTemplate?.slots || [];
   const visibleSlotIds = useMemo(() => new Set(slots.map((slot) => slot.id)), [slots]);
   const visibleSlotTimeKeys = useMemo(
     () => new Set(slots.map((slot) => getSlotTimeKey(slot)).filter(Boolean)),
@@ -197,7 +258,7 @@ export default function EmployeePlannerPage() {
       return false;
     }
 
-    if (selectedTemplate?.id && item.template?.id !== selectedTemplate.id) {
+    if (!isAllTemplatesSelected && selectedTemplate?.id && item.template?.id !== selectedTemplate.id) {
       return false;
     }
 
@@ -236,35 +297,10 @@ export default function EmployeePlannerPage() {
   );
 
   useEffect(() => {
-    setSelectedTemplateId('');
+    setSelectedTemplateId(ALL_TEMPLATES_ID);
     setDefaultClassId('');
     setLocalCells([]);
   }, [employeeId]);
-
-  useEffect(() => {
-    if (!planner.length || !templates.length) return;
-    if (selectedTemplateId) return;
-
-    const plannerSlotIds = new Set(
-      planner.map((item) => item.timeSlotId || item.timeSlot?.id).filter(Boolean),
-    );
-    const plannerSlotTimeKeys = new Set(
-      planner
-        .map((item) => getSlotTimeKey(item.timeSlot) || getSlotTimeKey(allSlotsById.get(item.timeSlotId)))
-        .filter(Boolean),
-    );
-    const templateMatches = templates.map((template) => ({
-      template,
-      matches: template.slots.filter(
-        (slot) => plannerSlotIds.has(slot.id) || plannerSlotTimeKeys.has(getSlotTimeKey(slot)),
-      ).length,
-    }));
-    const bestMatch = templateMatches.sort((first, second) => second.matches - first.matches)[0];
-
-    if (bestMatch?.matches > 0) {
-      setSelectedTemplateId(bestMatch.template.id);
-    }
-  }, [allSlotsById, planner, selectedTemplateId, templates]);
 
   useEffect(() => {
     const mapped = planner.map((item) => ({
@@ -421,11 +457,6 @@ export default function EmployeePlannerPage() {
           : item,
       ),
     );
-  }
-
-  function getSlotMinutes(time: string) {
-    const [hours = '0', minutes = '0'] = time.split(':');
-    return Number(hours) * 60 + Number(minutes);
   }
 
   function getSlotsForShift(template: TimeTemplate, shift: string) {
@@ -653,10 +684,13 @@ export default function EmployeePlannerPage() {
           <div>
             <label className="text-sm font-medium">Modelo de horário</label>
             <select
-              value={selectedTemplate?.id || ''}
+              value={selectedTemplateId}
               onChange={(e) => setSelectedTemplateId(e.target.value)}
               className="mt-1 w-full border rounded-xl px-3 py-2 text-sm"
             >
+              <option value={ALL_TEMPLATES_ID}>
+                Todos os modelos / aulas cadastradas
+              </option>
               {templates.map((template) => (
                 <option key={template.id} value={template.id}>
                   {template.name}
