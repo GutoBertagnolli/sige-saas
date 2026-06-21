@@ -137,6 +137,31 @@ function getEmployeeSubjectId(employee: Employee) {
   return employee.assignments?.find((assignment) => assignment.subject)?.subject?.id ?? '';
 }
 
+function getEmployeeFunction(employee: Employee) {
+  return employee.assignments?.find((assignment) => assignment.function)?.function?.name ?? '';
+}
+
+function formatRoleType(roleType?: string) {
+  const roleLabels: Record<string, string> = {
+    PROFESSOR: 'Professor',
+    AUXILIAR: 'Auxiliar',
+    ORIENTADOR: 'Orientador',
+    DIRETOR: 'Diretor',
+    SECRETARIA: 'Secretaria',
+    SERVICOS_GERAIS: 'Serviços Gerais',
+  };
+
+  return roleType ? roleLabels[roleType] ?? roleType.replace(/_/g, ' ') : 'Servidor';
+}
+
+function getEmployeeSubjectOrFunction(employee: Employee) {
+  if (employee.roleType === 'PROFESSOR' || !employee.roleType) {
+    return getEmployeeSubject(employee) || formatRoleType(employee.roleType);
+  }
+
+  return getEmployeeFunction(employee) || formatRoleType(employee.roleType);
+}
+
 function getTimeMinutes(time: string) {
   const [hours = '0', minutes = '0'] = time.split(':');
   return Number(hours) * 60 + Number(minutes);
@@ -422,7 +447,7 @@ export default function EmployeesPage() {
                 <tr className="border-b">
                   <th className="text-left py-3">Nome</th>
                   <th className="text-left py-3">Escola</th>
-                  <th className="text-left py-3">Disciplina</th>
+                  <th className="text-left py-3">Disciplina / função</th>
                   <th className="text-left py-3">Banco de horas</th>
                   <th className="text-right py-3">Ações</th>
                 </tr>
@@ -450,7 +475,7 @@ export default function EmployeesPage() {
                     <tr key={employee.id} className="border-b">
                       <td className="py-3 font-medium">{employee.name}</td>
                       <td className="py-3">{employee.school?.name || '-'}</td>
-                      <td className="py-3">{getEmployeeSubject(employee) || '-'}</td>
+                      <td className="py-3">{getEmployeeSubjectOrFunction(employee) || '-'}</td>
                       <td className="py-3">
                         <span
                           className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${balanceClass}`}
