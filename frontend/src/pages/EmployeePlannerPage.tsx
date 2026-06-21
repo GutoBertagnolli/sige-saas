@@ -236,7 +236,14 @@ export default function EmployeePlannerPage() {
   );
 
   useEffect(() => {
+    setSelectedTemplateId('');
+    setDefaultClassId('');
+    setLocalCells([]);
+  }, [employeeId]);
+
+  useEffect(() => {
     if (!planner.length || !templates.length) return;
+    if (selectedTemplateId) return;
 
     const plannerSlotIds = new Set(
       planner.map((item) => item.timeSlotId || item.timeSlot?.id).filter(Boolean),
@@ -246,17 +253,6 @@ export default function EmployeePlannerPage() {
         .map((item) => getSlotTimeKey(item.timeSlot) || getSlotTimeKey(allSlotsById.get(item.timeSlotId)))
         .filter(Boolean),
     );
-    const currentTemplate = templates.find((item) => item.id === selectedTemplateId);
-
-    if (
-      currentTemplate &&
-      currentTemplate.slots.some(
-        (slot) => plannerSlotIds.has(slot.id) || plannerSlotTimeKeys.has(getSlotTimeKey(slot)),
-      )
-    ) {
-      return;
-    }
-
     const templateMatches = templates.map((template) => ({
       template,
       matches: template.slots.filter(
