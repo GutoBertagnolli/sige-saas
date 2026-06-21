@@ -82,6 +82,15 @@ function isAnnouncementExpired(announcement: Announcement) {
   return new Date(announcement.endDate).getTime() < Date.now();
 }
 
+function isAnnouncementExpiredBeyondRetention(announcement: Announcement) {
+  if (!announcement.endDate) return false;
+
+  const sevenDaysAfterExpiration =
+    new Date(announcement.endDate).getTime() + 7 * 24 * 60 * 60 * 1000;
+
+  return sevenDaysAfterExpiration < Date.now();
+}
+
 function formatAnnouncementExpiredDate(announcement: Announcement) {
   if (!announcement.endDate) return '';
 
@@ -144,7 +153,10 @@ export default function AnnouncementsPage() {
     queryFn: getAccessUsers,
   });
 
-  const sortedAnnouncements = [...announcements].sort((first, second) => {
+  const displayedAnnouncements = announcements.filter(
+    (announcement) => !isAnnouncementExpiredBeyondRetention(announcement),
+  );
+  const sortedAnnouncements = [...displayedAnnouncements].sort((first, second) => {
     const firstExpired = isAnnouncementExpired(first) ? 1 : 0;
     const secondExpired = isAnnouncementExpired(second) ? 1 : 0;
 
@@ -533,7 +545,7 @@ export default function AnnouncementsPage() {
                 );
               })}
 
-              {announcements.length === 0 && (
+              {displayedAnnouncements.length === 0 && (
                 <div className="rounded-xl border bg-slate-50 p-4 text-sm text-slate-500">
                   Nenhum aviso publicado.
                 </div>

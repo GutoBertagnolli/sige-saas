@@ -453,7 +453,7 @@ function Layout({
         <div className="flex-1">
         <Routes>
           <Route path="/servidores/:employeeId/planner" element={<EmployeePlannerPage />} />
-          <Route path="/dashboard" element={<DashboardHome user={user} />} />
+          <Route path="/dashboard" element={<DashboardHome />} />
           <Route path="/mensagens" element={<AnnouncementsPage />} />
   	  <Route path="/escolas" element={<SchoolsPage />} />          
           <Route path="/turmas" element={<ClassesPage />} />
@@ -1116,9 +1116,8 @@ function formatDashboardStatus(status: string) {
   return labels[status] || status;
 }
 
-function DashboardHome({ user }: { user: AuthUser }) {
+function DashboardHome() {
   const navigate = useNavigate();
-  const canSeeExpiredAnnouncements = canAccessAdmin(user);
   const [popupStep, setPopupStep] = React.useState<'none' | 'messages' | 'substitutions'>('none');
   const { data: announcements = [], isFetched: announcementsFetched } = useQuery({
     queryKey: ['announcements', 'active'],
@@ -1155,9 +1154,7 @@ function DashboardHome({ user }: { user: AuthUser }) {
   );
   const activeSchools = schools.filter((school) => school.active !== false).length;
   const activeEmployees = employees.filter((employee) => employee.active !== false).length;
-  const visibleAnnouncements = canSeeExpiredAnnouncements
-    ? announcements
-    : announcements.filter((announcement) => !isAnnouncementExpired(announcement));
+  const visibleAnnouncements = announcements.filter((announcement) => !isAnnouncementExpired(announcement));
   const sortedAnnouncements = [...visibleAnnouncements].sort((first, second) => {
     const firstExpired = isAnnouncementExpired(first) ? 1 : 0;
     const secondExpired = isAnnouncementExpired(second) ? 1 : 0;
