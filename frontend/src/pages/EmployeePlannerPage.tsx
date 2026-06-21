@@ -15,6 +15,7 @@ type Employee = {
 
 type Slot = {
   id: string;
+  templateId?: string | null;
   slotOrder: number;
   startTime: string;
   endTime: string;
@@ -51,12 +52,15 @@ type WeeklySchedule = {
   timeSlot?: {
     id: string;
     templateId?: string | null;
+    startTime?: string | null;
+    endTime?: string | null;
   } | null;
 };
 
 type LocalCell = {
   weekday: string;
   timeSlotId: string;
+  slotTimeKey: string;
   classId: string;
   room: string;
   type: string;
@@ -94,6 +98,10 @@ const TYPE_COLORS: Record<string, string> = {
 
 function getEmployeeSubject(employee?: Employee) {
   return employee?.assignments?.find((assignment) => assignment.subject)?.subject ?? null;
+}
+
+function getSlotTimeKey(slot?: { startTime?: string | null; endTime?: string | null } | null) {
+  return slot?.startTime && slot.endTime ? `${slot.startTime}-${slot.endTime}` : '';
 }
 
 async function getEmployees() {
@@ -168,6 +176,22 @@ export default function EmployeePlannerPage() {
   }, [templates, selectedTemplateId]);
 
   const slots = selectedTemplate?.slots || [];
+  const allSlotsById = useMemo(() => {
+    const map = new Map<string, Slot>();
+
+    templates.forEach((template) => {
+      template.slots.forEach((slot) => {
+        map.set(slot.id, slot);
+      });
+    });
+
+    return map;
+  }, [templates]);
+  const visibleSlotIds = useMemo(() => new Set(slots.map((slot) => slot.id)), [slots]);
+  const visibleSlotTimeKeys = useMemo(
+    () => new Set(slots.map((slot) => getSlotTimeKey(slot)).filter(Boolean)),
+    [slots],
+  );
   const availableClasses = classes.filter((item) => {
     if (employee?.school?.id && item.school?.id !== employee.school.id) {
       return false;
@@ -183,12 +207,32 @@ export default function EmployeePlannerPage() {
     () => new Map(classes.map((item: ClassItem) => [item.id, item])),
     [classes],
   );
-  const firstPlannerClassId = useMemo(
+  const visibleCells = useMemo(
     () =>
-      planner.find((item) => item.classId || item.class?.id)?.classId ??
-      planner.find((item) => item.classId || item.class?.id)?.class?.id ??
-      '',
-    [planner],
+      localCells.filter(
+        (cell) =>
+          visibleSlotIds.has(cell.timeSlotId) ||
+          Boolean(cell.slotTimeKey && visibleSlotTimeKeys.has(cell.slotTimeKey)),
+      ),
+    [localCells, visibleSlotIds, visibleSlotTimeKeys],
+  );
+  const visibleClassOptions = useMemo(() => {
+    const options = new Map(availableClasses.map((item) => [item.id, item]));
+
+    visibleCells.forEach((cell) => {
+      const classItem = classById.get(cell.classId);
+      if (classItem) {
+        options.set(classItem.id, classItem);
+      }
+    });
+
+    return Array.from(options.values()).sort((first, second) =>
+      first.name.localeCompare(second.name),
+    );
+  }, [availableClasses, classById, visibleCells]);
+  const firstVisibleClassId = useMemo(
+    () => visibleCells.find((cell) => cell.classId)?.classId ?? '',
+    [visibleCells],
   );
 
   useEffect(() => {
@@ -197,30 +241,40 @@ export default function EmployeePlannerPage() {
     const plannerSlotIds = new Set(
       planner.map((item) => item.timeSlotId || item.timeSlot?.id).filter(Boolean),
     );
+    const plannerSlotTimeKeys = new Set(
+      planner
+        .map((item) => getSlotTimeKey(item.timeSlot) || getSlotTimeKey(allSlotsById.get(item.timeSlotId)))
+        .filter(Boolean),
+    );
     const currentTemplate = templates.find((item) => item.id === selectedTemplateId);
 
     if (
       currentTemplate &&
-      currentTemplate.slots.some((slot) => plannerSlotIds.has(slot.id))
+      currentTemplate.slots.some(
+        (slot) => plannerSlotIds.has(slot.id) || plannerSlotTimeKeys.has(getSlotTimeKey(slot)),
+      )
     ) {
       return;
     }
 
     const templateMatches = templates.map((template) => ({
       template,
-      matches: template.slots.filter((slot) => plannerSlotIds.has(slot.id)).length,
+      matches: template.slots.filter(
+        (slot) => plannerSlotIds.has(slot.id) || plannerSlotTimeKeys.has(getSlotTimeKey(slot)),
+      ).length,
     }));
     const bestMatch = templateMatches.sort((first, second) => second.matches - first.matches)[0];
 
     if (bestMatch?.matches > 0) {
       setSelectedTemplateId(bestMatch.template.id);
     }
-  }, [planner, selectedTemplateId, templates]);
+  }, [allSlotsById, planner, selectedTemplateId, templates]);
 
   useEffect(() => {
     const mapped = planner.map((item) => ({
       weekday: item.weekday,
       timeSlotId: item.timeSlotId,
+      slotTimeKey: getSlotTimeKey(item.timeSlot) || getSlotTimeKey(allSlotsById.get(item.timeSlotId)),
       classId: item.classId ?? item.class?.id ?? '',
       room: item.room ?? '',
       type: item.type,
@@ -229,7 +283,7 @@ export default function EmployeePlannerPage() {
     }));
 
     setLocalCells(mapped);
-  }, [planner, employeeSubject?.name]);
+  }, [allSlotsById, planner, employeeSubject?.name]);
 
   useEffect(() => {
     if (
@@ -240,15 +294,15 @@ export default function EmployeePlannerPage() {
     }
 
     if (
-      firstPlannerClassId &&
-      availableClasses.some((item) => item.id === firstPlannerClassId)
+      firstVisibleClassId &&
+      availableClasses.some((item) => item.id === firstVisibleClassId)
     ) {
-      setDefaultClassId(firstPlannerClassId);
+      setDefaultClassId(firstVisibleClassId);
       return;
     }
 
     setDefaultClassId(availableClasses[0]?.id ?? '');
-  }, [availableClasses, defaultClassId, firstPlannerClassId]);
+  }, [availableClasses, defaultClassId, firstVisibleClassId]);
 
   const saveMutation = useMutation({
     mutationFn: savePlannerBulk,
@@ -264,9 +318,22 @@ export default function EmployeePlannerPage() {
     },
   });
 
-  function findCell(weekday: string, timeSlotId: string) {
+  function findCell(weekday: string, slot: Slot) {
+    const exactCell = localCells.find(
+      (item) => item.weekday === weekday && item.timeSlotId === slot.id,
+    );
+
+    if (exactCell) {
+      return exactCell;
+    }
+
+    const slotTimeKey = getSlotTimeKey(slot);
+
     return localCells.find(
-      (item) => item.weekday === weekday && item.timeSlotId === timeSlotId,
+      (item) =>
+        item.weekday === weekday &&
+        Boolean(slotTimeKey) &&
+        item.slotTimeKey === slotTimeKey,
     );
   }
 
@@ -275,7 +342,7 @@ export default function EmployeePlannerPage() {
     slot: Slot,
     mode: 'add' | 'remove',
   ) {
-    const existing = findCell(weekday, slot.id);
+    const existing = findCell(weekday, slot);
 
     if (mode === 'remove') {
       if (!existing) return;
@@ -283,7 +350,7 @@ export default function EmployeePlannerPage() {
       setLocalCells((prev) =>
         prev.filter(
           (item) =>
-            !(item.weekday === weekday && item.timeSlotId === slot.id),
+            !(item.weekday === existing.weekday && item.timeSlotId === existing.timeSlotId),
         ),
       );
 
@@ -302,6 +369,7 @@ export default function EmployeePlannerPage() {
       {
         weekday,
         timeSlotId: slot.id,
+        slotTimeKey: getSlotTimeKey(slot),
         classId: defaultClassId,
         room: '',
         type: defaultType,
@@ -312,7 +380,7 @@ export default function EmployeePlannerPage() {
   }
 
   function startPaint(weekday: string, slot: Slot) {
-    const existing = findCell(weekday, slot.id);
+    const existing = findCell(weekday, slot);
     const mode = existing ? 'remove' : 'add';
 
     setDragMode(mode);
@@ -321,9 +389,12 @@ export default function EmployeePlannerPage() {
   }
 
   function updateCellType(weekday: string, slot: Slot, type: string) {
+    const existing = findCell(weekday, slot);
+    if (!existing) return;
+
     setLocalCells((prev) =>
       prev.map((item) =>
-        item.weekday === weekday && item.timeSlotId === slot.id
+        item.weekday === existing.weekday && item.timeSlotId === existing.timeSlotId
           ? { ...item, type }
           : item,
       ),
@@ -331,9 +402,12 @@ export default function EmployeePlannerPage() {
   }
 
   function updateCellClass(weekday: string, slot: Slot, classId: string) {
+    const existing = findCell(weekday, slot);
+    if (!existing) return;
+
     setLocalCells((prev) =>
       prev.map((item) =>
-        item.weekday === weekday && item.timeSlotId === slot.id
+        item.weekday === existing.weekday && item.timeSlotId === existing.timeSlotId
           ? { ...item, classId }
           : item,
       ),
@@ -341,9 +415,12 @@ export default function EmployeePlannerPage() {
   }
 
   function updateCellRoom(weekday: string, slot: Slot, room: string) {
+    const existing = findCell(weekday, slot);
+    if (!existing) return;
+
     setLocalCells((prev) =>
       prev.map((item) =>
-        item.weekday === weekday && item.timeSlotId === slot.id
+        item.weekday === existing.weekday && item.timeSlotId === existing.timeSlotId
           ? { ...item, room }
           : item,
       ),
@@ -384,6 +461,7 @@ export default function EmployeePlannerPage() {
         newCells.push({
           weekday: day.key,
           timeSlotId: slot.id,
+          slotTimeKey: getSlotTimeKey(slot),
           classId: defaultClassId,
           room: '',
           type: defaultType,
@@ -402,8 +480,11 @@ export default function EmployeePlannerPage() {
 
   function mergeSlots(prev: LocalCell[], slotsToFill: Slot[]) {
     const slotIds = new Set(slotsToFill.map((slot) => slot.id));
+    const slotTimeKeys = new Set(slotsToFill.map((slot) => getSlotTimeKey(slot)).filter(Boolean));
     const withoutTemplateSlots = prev.filter(
-      (item) => !slotIds.has(item.timeSlotId),
+      (item) =>
+        !slotIds.has(item.timeSlotId) &&
+        !Boolean(item.slotTimeKey && slotTimeKeys.has(item.slotTimeKey)),
     );
 
     return [...withoutTemplateSlots, ...buildCellsForSlots(slotsToFill)];
@@ -533,7 +614,7 @@ export default function EmployeePlannerPage() {
             <p className="text-sm text-slate-500">
               {employee?.name || 'Servidor'} •{' '}
               {employee?.school?.name || 'Sem escola vinculada'} •{' '}
-              {employeeSubject?.name || 'Sem matÃ©ria cadastrada'}
+              {employeeSubject?.name || 'Sem disciplina cadastrada'}
             </p>
           </div>
 
@@ -654,7 +735,7 @@ export default function EmployeePlannerPage() {
                     </td>
 
                     {WEEKDAYS.map((day) => {
-                      const cell = findCell(day.key, slot.id);
+                      const cell = findCell(day.key, slot);
                       const active = Boolean(cell);
 
                       return (
@@ -698,7 +779,7 @@ export default function EmployeePlannerPage() {
                                   className="w-full border rounded-lg px-1 py-1 text-[10px]"
                                 >
                                   <option value="">Turma</option>
-                                  {availableClasses.map((item) => (
+                                  {visibleClassOptions.map((item) => (
                                     <option key={item.id} value={item.id}>
                                       {item.name}
                                     </option>
