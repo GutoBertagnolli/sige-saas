@@ -1119,10 +1119,8 @@ function formatDashboardStatus(status: string) {
 function DashboardHome({ user }: { user: AuthUser }) {
   const navigate = useNavigate();
   const canSeeExpiredAnnouncements = canAccessAdmin(user);
-  const [popupStep, setPopupStep] = React.useState<'none' | 'messages' | 'substitutions'>(() =>
-    sessionStorage.getItem(DASHBOARD_POPUP_KEY) === '1' ? 'messages' : 'none',
-  );
-  const { data: announcements = [] } = useQuery({
+  const [popupStep, setPopupStep] = React.useState<'none' | 'messages' | 'substitutions'>('none');
+  const { data: announcements = [], isFetched: announcementsFetched } = useQuery({
     queryKey: ['announcements', 'active'],
     queryFn: getActiveAnnouncements,
   });
@@ -1138,7 +1136,7 @@ function DashboardHome({ user }: { user: AuthUser }) {
     queryKey: ['dashboard', 'absences'],
     queryFn: getDashboardAbsences,
   });
-  const { data: substitutions = [] } = useQuery({
+  const { data: substitutions = [], isFetched: substitutionsFetched } = useQuery({
     queryKey: ['dashboard', 'substitutions'],
     queryFn: getDashboardSubstitutions,
   });
@@ -1198,8 +1196,31 @@ function DashboardHome({ user }: { user: AuthUser }) {
     },
   ];
 
+  React.useEffect(() => {
+    if (sessionStorage.getItem(DASHBOARD_POPUP_KEY) !== '1') return;
+    if (!announcementsFetched || !substitutionsFetched) return;
+
+    if (sortedAnnouncements.length > 0) {
+      setPopupStep('messages');
+      return;
+    }
+
+    if (todaySubstitutions.length > 0) {
+      setPopupStep('substitutions');
+      return;
+    }
+
+    sessionStorage.removeItem(DASHBOARD_POPUP_KEY);
+    setPopupStep('none');
+  }, [announcementsFetched, substitutionsFetched, sortedAnnouncements.length, todaySubstitutions.length]);
+
   function closeMessagesPopup() {
-    setPopupStep('substitutions');
+    if (todaySubstitutions.length > 0) {
+      setPopupStep('substitutions');
+      return;
+    }
+
+    closeSubstitutionsPopup();
   }
 
   function closeSubstitutionsPopup() {
