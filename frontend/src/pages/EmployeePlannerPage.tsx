@@ -48,6 +48,10 @@ type WeeklySchedule = {
   room?: string | null;
   subject?: string | null;
   requiresSubstitution?: boolean;
+  timeSlot?: {
+    id: string;
+    templateId?: string | null;
+  } | null;
 };
 
 type LocalCell = {
@@ -179,6 +183,39 @@ export default function EmployeePlannerPage() {
     () => new Map(classes.map((item: ClassItem) => [item.id, item])),
     [classes],
   );
+  const firstPlannerClassId = useMemo(
+    () =>
+      planner.find((item) => item.classId || item.class?.id)?.classId ??
+      planner.find((item) => item.classId || item.class?.id)?.class?.id ??
+      '',
+    [planner],
+  );
+
+  useEffect(() => {
+    if (!planner.length || !templates.length) return;
+
+    const plannerSlotIds = new Set(
+      planner.map((item) => item.timeSlotId || item.timeSlot?.id).filter(Boolean),
+    );
+    const currentTemplate = templates.find((item) => item.id === selectedTemplateId);
+
+    if (
+      currentTemplate &&
+      currentTemplate.slots.some((slot) => plannerSlotIds.has(slot.id))
+    ) {
+      return;
+    }
+
+    const templateMatches = templates.map((template) => ({
+      template,
+      matches: template.slots.filter((slot) => plannerSlotIds.has(slot.id)).length,
+    }));
+    const bestMatch = templateMatches.sort((first, second) => second.matches - first.matches)[0];
+
+    if (bestMatch?.matches > 0) {
+      setSelectedTemplateId(bestMatch.template.id);
+    }
+  }, [planner, selectedTemplateId, templates]);
 
   useEffect(() => {
     const mapped = planner.map((item) => ({
@@ -202,8 +239,16 @@ export default function EmployeePlannerPage() {
       return;
     }
 
+    if (
+      firstPlannerClassId &&
+      availableClasses.some((item) => item.id === firstPlannerClassId)
+    ) {
+      setDefaultClassId(firstPlannerClassId);
+      return;
+    }
+
     setDefaultClassId(availableClasses[0]?.id ?? '');
-  }, [availableClasses, defaultClassId]);
+  }, [availableClasses, defaultClassId, firstPlannerClassId]);
 
   const saveMutation = useMutation({
     mutationFn: savePlannerBulk,
