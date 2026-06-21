@@ -300,6 +300,8 @@ model Absence {
   endDate     DateTime
   reason      String?
   documentUrl String?
+  hourBankExempt          Boolean @default(false)
+  hourBankExemptionReason String?
   status      AbsenceStatus @default(OPEN)
   createdBy   String?
   createdAt   DateTime      @default(now())

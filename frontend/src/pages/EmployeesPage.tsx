@@ -56,6 +56,7 @@ type Substitution = {
   originalTeacher?: Employee | null;
   substituteTeacher?: Employee | null;
   absence?: {
+    hourBankExempt?: boolean;
     employee?: Employee | null;
   } | null;
 };
@@ -63,6 +64,8 @@ type Substitution = {
 type Absence = {
   id: string;
   status: string;
+  hourBankExempt?: boolean;
+  hourBankExemptionReason?: string | null;
   employeeId?: string;
   employee?: Employee | null;
   substitutions?: Substitution[];
@@ -230,7 +233,10 @@ export default function EmployeesPage() {
 
   const hourBalanceByEmployee = useMemo(() => {
     const balances = new Map<string, { absenceMinutes: number; compensatedMinutes: number }>();
-    const absenceSubstitutionsById = new Map<string, { employeeId?: string; substitution: Substitution }>();
+    const absenceSubstitutionsById = new Map<
+      string,
+      { employeeId?: string; hourBankExempt?: boolean; substitution: Substitution }
+    >();
 
     function ensureBalance(employeeId?: string) {
       if (!employeeId) return null;
@@ -250,7 +256,11 @@ export default function EmployeesPage() {
       const employeeId = absence.employeeId ?? absence.employee?.id;
 
       absence.substitutions?.forEach((substitution) => {
-        absenceSubstitutionsById.set(substitution.id, { employeeId, substitution });
+        absenceSubstitutionsById.set(substitution.id, {
+          employeeId,
+          hourBankExempt: absence.hourBankExempt,
+          substitution,
+        });
       });
     });
 
@@ -258,13 +268,15 @@ export default function EmployeesPage() {
       if (!absenceSubstitutionsById.has(substitution.id)) {
         absenceSubstitutionsById.set(substitution.id, {
           employeeId: substitution.absence?.employee?.id ?? substitution.originalTeacher?.id,
+          hourBankExempt: substitution.absence?.hourBankExempt,
           substitution,
         });
       }
     });
 
-    absenceSubstitutionsById.forEach(({ employeeId, substitution }) => {
+    absenceSubstitutionsById.forEach(({ employeeId, hourBankExempt, substitution }) => {
       if (substitution.status === 'CANCELLED') return;
+      if (hourBankExempt) return;
 
       const balance = ensureBalance(employeeId);
       if (!balance) return;

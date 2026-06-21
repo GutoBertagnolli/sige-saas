@@ -43,6 +43,8 @@ type Absence = {
   endDate: string;
   reason: string;
   documentUrl?: string | null;
+  hourBankExempt?: boolean;
+  hourBankExemptionReason?: string | null;
   status: string;
   type?: string;
   employeeId?: string;
@@ -290,6 +292,8 @@ export default function AbsencesPage() {
   const [endDate, setEndDate] = useState('');
   const [reason, setReason] = useState('ATESTADO');
   const [description, setDescription] = useState('');
+  const [hourBankExempt, setHourBankExempt] = useState(false);
+  const [hourBankExemptionReason, setHourBankExemptionReason] = useState('');
   const [documentUrl, setDocumentUrl] = useState('');
   const [documentName, setDocumentName] = useState('');
   const [replacementSuggestions, setReplacementSuggestions] = useState<ReplacementSuggestion[]>([]);
@@ -505,6 +509,11 @@ export default function AbsencesPage() {
       return;
     }
 
+    if (hourBankExempt && !hourBankExemptionReason.trim()) {
+      alert('Informe a justificativa para nao descontar do banco de horas.');
+      return;
+    }
+
     saveAbsenceMutation.mutate({
       id: editingAbsence?.id,
       employeeId,
@@ -512,6 +521,8 @@ export default function AbsencesPage() {
       endDate: `${endDate}T23:59:59.000Z`,
       reason,
       documentUrl: documentUrl || null,
+      hourBankExempt,
+      hourBankExemptionReason: hourBankExempt ? hourBankExemptionReason.trim() : null,
       status: 'OPEN',
       type: reason,
     });
@@ -524,6 +535,8 @@ export default function AbsencesPage() {
     setEndDate('');
     setReason('ATESTADO');
     setDescription('');
+    setHourBankExempt(false);
+    setHourBankExemptionReason('');
     setDocumentUrl('');
     setDocumentName('');
   }
@@ -536,6 +549,8 @@ export default function AbsencesPage() {
     setReason(absence.reason || absence.type || 'ATESTADO');
     setDocumentUrl(absence.documentUrl || '');
     setDocumentName(absence.documentUrl ? 'Documento anexado' : '');
+    setHourBankExempt(Boolean(absence.hourBankExempt));
+    setHourBankExemptionReason(absence.hourBankExemptionReason || '');
     setDescription('');
     setActiveTab('cadastro');
   }
@@ -710,6 +725,38 @@ export default function AbsencesPage() {
                 className="mt-1 w-full border rounded-xl px-3 py-2 text-sm"
                 placeholder="Campo apenas informativo nesta versao."
               />
+            </div>
+
+            <div className="mt-4 rounded-xl border bg-slate-50 p-4">
+              <label className="flex items-start gap-3 text-sm">
+                <input
+                  type="checkbox"
+                  checked={hourBankExempt}
+                  onChange={(event) => setHourBankExempt(event.target.checked)}
+                  className="mt-1 h-4 w-4 rounded border-slate-300"
+                />
+                <span>
+                  <span className="font-medium text-slate-900">
+                    Afastamento com justificativa, sem desconto no banco de horas
+                  </span>
+                  <span className="mt-1 block text-xs text-slate-500">
+                    Marque quando a ausencia nao deve gerar horas a compensar para o servidor.
+                  </span>
+                </span>
+              </label>
+
+              {hourBankExempt && (
+                <div className="mt-4">
+                  <label className="text-sm font-medium">Justificativa da ausencia *</label>
+                  <textarea
+                    value={hourBankExemptionReason}
+                    onChange={(event) => setHourBankExemptionReason(event.target.value)}
+                    rows={3}
+                    className="mt-1 w-full rounded-xl border bg-white px-3 py-2 text-sm"
+                    placeholder="Informe por que este afastamento nao deve descontar do banco de horas."
+                  />
+                </div>
+              )}
             </div>
 
             <div className="mt-4">
@@ -916,6 +963,7 @@ export default function AbsencesPage() {
                     <th className="text-left py-3 px-3">Inicio</th>
                     <th className="text-left py-3 px-3">Fim</th>
                     <th className="text-left py-3 px-3">Motivo</th>
+                    <th className="text-left py-3 px-3">Banco de horas</th>
                     <th className="text-left py-3 px-3">Documento</th>
                     <th className="text-left py-3 px-3">Situacao</th>
                     <th className="text-left py-3 px-3">Substituicoes</th>
@@ -932,6 +980,22 @@ export default function AbsencesPage() {
                       <td className="py-3 px-3">{new Date(absence.startDate).toLocaleDateString()}</td>
                       <td className="py-3 px-3">{new Date(absence.endDate).toLocaleDateString()}</td>
                       <td className="py-3 px-3">{absence.reason}</td>
+                      <td className="py-3 px-3">
+                        {absence.hourBankExempt ? (
+                          <div>
+                            <span className="inline-flex rounded-full border border-green-200 bg-green-50 px-2 py-1 text-xs font-medium text-green-700">
+                              Nao desconta
+                            </span>
+                            <div className="mt-1 max-w-xs text-xs text-slate-500">
+                              {absence.hourBankExemptionReason}
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-600">
+                            Desconta
+                          </span>
+                        )}
+                      </td>
                       <td className="py-3 px-3">
                         {absence.documentUrl ? (
                           <a
@@ -976,7 +1040,7 @@ export default function AbsencesPage() {
 
                   {historyAbsences.length === 0 && (
                     <tr>
-                      <td colSpan={10} className="py-6 text-center text-slate-500">
+                      <td colSpan={11} className="py-6 text-center text-slate-500">
                         Nenhum afastamento encontrado para a consulta.
                       </td>
                     </tr>
