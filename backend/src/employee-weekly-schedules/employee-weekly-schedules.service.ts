@@ -1,19 +1,24 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../common/prisma.service';
 
 @Injectable()
 export class EmployeeWeeklySchedulesService {
   constructor(private prisma: PrismaService) {}
 
-  findByEmployee(employeeId: string) {
+  findByEmployee(employeeId: string, schoolIds?: string[]) {
     return this.prisma.employeeWeeklySchedule.findMany({
       where: {
         employeeId,
         active: true,
+        schoolId: schoolIds ? { in: schoolIds } : undefined,
       },
       include: {
         school: true,
-        class: true,
+        class: {
+          include: {
+            school: true,
+          },
+        },
         timeSlot: true,
       },
       orderBy: [
@@ -23,17 +28,52 @@ export class EmployeeWeeklySchedulesService {
     });
   }
 
+  async getSchoolId(id: string) {
+    const schedule = await this.prisma.employeeWeeklySchedule.findUnique({
+      where: { id },
+      select: { schoolId: true },
+    });
+
+    return schedule?.schoolId ?? null;
+  }
+
   create(data: any) {
     return this.prisma.employeeWeeklySchedule.create({
       data,
     });
   }
 
-  async bulkReplace(employeeId: string, items: any[]) {
+  async bulkReplace(employeeId: string, items: any[], schoolIds?: string[]) {
+    const classIds = Array.from(new Set(items.map((item) => item.classId).filter(Boolean))) as string[];
+    const classes = classIds.length
+      ? await this.prisma.class.findMany({
+          where: {
+            id: {
+              in: classIds,
+            },
+          },
+          select: {
+            id: true,
+            schoolId: true,
+          },
+        })
+      : [];
+    const classSchoolById = new Map(classes.map((classItem) => [classItem.id, classItem.schoolId]));
+
+    for (const item of items) {
+      if (!item.classId) continue;
+
+      const classSchoolId = classSchoolById.get(item.classId);
+      if (!classSchoolId || classSchoolId !== item.schoolId) {
+        throw new BadRequestException('A turma selecionada nao pertence a escola informada no horario.');
+      }
+    }
+
     return this.prisma.$transaction(async (transaction) => {
       await transaction.employeeWeeklySchedule.updateMany({
         where: {
           employeeId,
+          schoolId: schoolIds ? { in: schoolIds } : undefined,
         },
         data: {
           active: false,
@@ -43,6 +83,13 @@ export class EmployeeWeeklySchedulesService {
       await transaction.classSchedule.updateMany({
         where: {
           teacherId: employeeId,
+          class: schoolIds
+            ? {
+                schoolId: {
+                  in: schoolIds,
+                },
+              }
+            : undefined,
         },
         data: {
           teacherId: null,

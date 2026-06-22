@@ -46,7 +46,11 @@ type WeeklySchedule = {
   type: string;
   timeSlotId: string;
   classId?: string | null;
-  class?: { id: string; name: string } | null;
+  class?: {
+    id: string;
+    name: string;
+    school?: { id: string; name: string } | null;
+  } | null;
   room?: string | null;
   subject?: string | null;
   requiresSubstitution?: boolean;
@@ -138,6 +142,11 @@ function sortSlotsByTime(slots: Slot[]) {
 function getSlotMinutes(time: string) {
   const [hours = '0', minutes = '0'] = time.split(':');
   return Number(hours) * 60 + Number(minutes);
+}
+
+function formatClassOption(classItem?: ClassItem | null) {
+  if (!classItem) return '';
+  return classItem.school?.name ? `${classItem.name} - ${classItem.school.name}` : classItem.name;
 }
 
 async function getEmployees() {
@@ -321,6 +330,11 @@ export default function EmployeePlannerPage() {
     () => visibleCells.find((cell) => cell.classId)?.classId ?? '',
     [visibleCells],
   );
+
+  function getCellClass(cell?: LocalCell | null) {
+    if (!cell?.classId) return null;
+    return classById.get(cell.classId) ?? null;
+  }
 
   useEffect(() => {
     setSelectedTemplateId(ALL_TEMPLATES_ID);
@@ -741,7 +755,7 @@ export default function EmployeePlannerPage() {
               <option value="">Selecione</option>
               {availableClasses.map((item) => (
                 <option key={item.id} value={item.id}>
-                  {item.name}
+                  {formatClassOption(item)}
                 </option>
               ))}
             </select>
@@ -799,6 +813,7 @@ export default function EmployeePlannerPage() {
                     {WEEKDAYS.map((day) => {
                       const cell = findCell(day.key, slot);
                       const active = Boolean(cell);
+                      const cellClass = getCellClass(cell);
 
                       return (
                         <td key={day.key} className="p-2 border-r text-center">
@@ -820,9 +835,8 @@ export default function EmployeePlannerPage() {
                                 ? [
                                     TYPES.find((type) => type.value === cell?.type)?.label ||
                                       cell?.type,
-                                    cell?.classId
-                                      ? classById.get(cell.classId)?.name
-                                      : null,
+                                    cellClass?.name,
+                                    cellClass?.school?.name,
                                     cell?.subject || employeeSubject?.name || null,
                                     cell?.room ? `Sala ${cell.room}` : null,
                                   ]
@@ -843,7 +857,7 @@ export default function EmployeePlannerPage() {
                                   <option value="">Turma</option>
                                   {visibleClassOptions.map((item) => (
                                     <option key={item.id} value={item.id}>
-                                      {item.name}
+                                      {formatClassOption(item)}
                                     </option>
                                   ))}
                                 </select>
