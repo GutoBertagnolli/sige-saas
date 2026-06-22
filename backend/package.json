@@ -1,6 +1,6 @@
 {
     "name":  "sige-backend",
-    "version":  "0.4.48",
+    "version":  "0.4.49",
     "description":  "SIGE by SUPORTIVA - Backend NestJS",
     "scripts":  {
                     "start":  "nest start",
@@ -39,6 +39,7 @@
                             "typescript":  "latest"
                         },
     "overrides":  {
-                      "effect":  "3.21.0"
+                      "effect":  "3.21.0",
+                      "multer":  "^2.2.0"
                   }
 }
