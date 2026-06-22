@@ -1,4 +1,5 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useState } from 'react';
 import { api } from '../services/api';
 
 type AuditUser = {
@@ -24,19 +25,46 @@ type AuditLog = {
   user?: AuditUser | null;
 };
 
+type OnlineSession = {
+  id: string;
+  ipAddress?: string | null;
+  userAgent?: string | null;
+  lastSeenAt: string;
+  createdAt: string;
+  isCurrentSession: boolean;
+  user: AuditUser;
+};
+
 const ACTION_LABELS: Record<string, string> = {
   LOGIN: 'Login',
   CREATE: 'Cadastro',
-  UPDATE: 'Edição',
-  DELETE: 'Exclusão',
+  UPDATE: 'Edicao',
+  DELETE: 'Exclusao',
   GENERATE_ACCESS: 'Acesso gerado',
   BULK_REPLACE: 'Planner salvo',
   ACCEPT: 'Aceite',
   DECLINE: 'Recusa',
+  FORCE_LOGOFF: 'Logoff forcado',
+  FORCE_LOGOFF_ALL: 'Logoff geral',
 };
 
 async function getAuditLogs() {
   const response = await api.get<AuditLog[]>('/audit-logs');
+  return response.data;
+}
+
+async function getOnlineSessions() {
+  const response = await api.get<OnlineSession[]>('/audit-logs/sessions');
+  return response.data;
+}
+
+async function forceLogoutSession(id: string) {
+  const response = await api.put<OnlineSession[]>(`/audit-logs/sessions/${id}/logout`);
+  return response.data;
+}
+
+async function forceLogoutAll() {
+  const response = await api.put<OnlineSession[]>('/audit-logs/sessions/logout-all');
   return response.data;
 }
 
@@ -58,6 +86,7 @@ function summarizeData(value: unknown) {
     data.loginEmail,
     data.type,
     data.status,
+    data.ipAddress,
     data.totalItems !== undefined ? `${data.totalItems} itens` : null,
   ].filter(Boolean);
 
@@ -65,9 +94,42 @@ function summarizeData(value: unknown) {
 }
 
 export default function AuditLogsPage() {
+  const queryClient = useQueryClient();
+  const [activeTab, setActiveTab] = useState<'sessions' | 'history'>('sessions');
+
   const { data: logs = [], isLoading, isError } = useQuery({
     queryKey: ['audit-logs'],
     queryFn: getAuditLogs,
+    enabled: activeTab === 'history',
+  });
+  const {
+    data: sessions = [],
+    isLoading: sessionsLoading,
+    isError: sessionsError,
+  } = useQuery({
+    queryKey: ['audit-log-sessions'],
+    queryFn: getOnlineSessions,
+    refetchInterval: 60_000,
+  });
+  const forceLogoutMutation = useMutation({
+    mutationFn: forceLogoutSession,
+    onSuccess: (updatedSessions) => {
+      queryClient.setQueryData(['audit-log-sessions'], updatedSessions);
+      queryClient.invalidateQueries({ queryKey: ['audit-logs'] });
+    },
+    onError: (error: any) => {
+      alert(error?.response?.data?.message ?? 'Erro ao forcar logoff.');
+    },
+  });
+  const forceLogoutAllMutation = useMutation({
+    mutationFn: forceLogoutAll,
+    onSuccess: (updatedSessions) => {
+      queryClient.setQueryData(['audit-log-sessions'], updatedSessions);
+      queryClient.invalidateQueries({ queryKey: ['audit-logs'] });
+    },
+    onError: (error: any) => {
+      alert(error?.response?.data?.message ?? 'Erro ao forcar logoff geral.');
+    },
   });
 
   return (
@@ -76,24 +138,126 @@ export default function AuditLogsPage() {
         <div className="mb-6">
           <h2 className="text-lg font-semibold">Logs do sistema</h2>
           <p className="text-sm text-slate-500">
-            Cadastros, edições, exclusões, alterações de planner e horários de login.
+            Sessoes online, cadastros, edicoes, exclusoes, alteracoes de planner e horarios de login.
           </p>
         </div>
 
-        {isLoading ? (
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+          <div className="inline-flex rounded-xl border bg-slate-50 p-1">
+            <button
+              onClick={() => setActiveTab('sessions')}
+              className={`rounded-lg px-4 py-2 text-sm font-medium ${
+                activeTab === 'sessions' ? 'bg-slate-900 text-white' : 'text-slate-600'
+              }`}
+            >
+              Online
+            </button>
+            <button
+              onClick={() => setActiveTab('history')}
+              className={`rounded-lg px-4 py-2 text-sm font-medium ${
+                activeTab === 'history' ? 'bg-slate-900 text-white' : 'text-slate-600'
+              }`}
+            >
+              Historico
+            </button>
+          </div>
+
+          {activeTab === 'sessions' && sessions.length > 1 && (
+            <button
+              onClick={() => {
+                if (confirm('Forcar logoff de todos os outros usuarios online?')) {
+                  forceLogoutAllMutation.mutate();
+                }
+              }}
+              disabled={forceLogoutAllMutation.isPending}
+              className="rounded-xl border border-red-200 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-60"
+            >
+              {forceLogoutAllMutation.isPending ? 'Derrubando...' : 'Forcar logoff de todos'}
+            </button>
+          )}
+        </div>
+
+        {activeTab === 'sessions' ? (
+          sessionsLoading ? (
+            <div className="text-sm text-slate-500">Carregando sessoes online...</div>
+          ) : sessionsError ? (
+            <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+              Nao foi possivel carregar as sessoes. O acesso e restrito a Secretaria e Administradores.
+            </div>
+          ) : (
+            <div className="overflow-auto">
+              <table className="w-full min-w-[900px] text-sm">
+                <thead>
+                  <tr className="border-b bg-slate-50 text-left text-slate-700">
+                    <th className="px-3 py-3">Usuario</th>
+                    <th className="px-3 py-3">Perfil</th>
+                    <th className="px-3 py-3">IP</th>
+                    <th className="px-3 py-3">Online desde</th>
+                    <th className="px-3 py-3">Ultimo sinal</th>
+                    <th className="px-3 py-3 text-right">Acoes</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sessions.map((session) => (
+                    <tr key={session.id} className="border-b last:border-b-0">
+                      <td className="px-3 py-3">
+                        <div className="font-medium text-slate-950">
+                          {session.user.name}
+                          {session.isCurrentSession && (
+                            <span className="ml-2 rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700">
+                              Voce
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-xs text-slate-500">{session.user.email}</div>
+                      </td>
+                      <td className="px-3 py-3">
+                        {session.user.role?.name ?? session.user.employee?.roleType ?? '-'}
+                      </td>
+                      <td className="px-3 py-3 text-slate-600">{session.ipAddress ?? '-'}</td>
+                      <td className="px-3 py-3 whitespace-nowrap">{formatDateTime(session.createdAt)}</td>
+                      <td className="px-3 py-3 whitespace-nowrap">{formatDateTime(session.lastSeenAt)}</td>
+                      <td className="px-3 py-3 text-right">
+                        <button
+                          onClick={() => {
+                            if (confirm(`Forcar logoff de ${session.user.name}?`)) {
+                              forceLogoutMutation.mutate(session.id);
+                            }
+                          }}
+                          disabled={session.isCurrentSession || forceLogoutMutation.isPending}
+                          className="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          Forcar logoff
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+
+                  {sessions.length === 0 && (
+                    <tr>
+                      <td colSpan={6} className="py-6 text-center text-slate-500">
+                        Nenhuma sessao online nos ultimos 5 minutos.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )
+        ) : isLoading ? (
           <div className="text-sm text-slate-500">Carregando logs...</div>
         ) : isError ? (
           <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-            Não foi possível carregar os logs. O acesso é restrito à Secretaria e Administradores.
+            Nao foi possivel carregar os logs. O acesso e restrito a Secretaria e Administradores.
           </div>
         ) : (
           <div className="overflow-auto">
             <table className="w-full min-w-[920px] text-sm">
               <thead>
                 <tr className="border-b bg-slate-50 text-left text-slate-700">
-                  <th className="px-3 py-3">Data / horário</th>
-                  <th className="px-3 py-3">Usuário</th>
-                  <th className="px-3 py-3">Ação</th>
+                  <th className="px-3 py-3">Data / horario</th>
+                  <th className="px-3 py-3">Usuario</th>
+                  <th className="px-3 py-3">Acao</th>
                   <th className="px-3 py-3">Cadastro</th>
                   <th className="px-3 py-3">Resumo</th>
                   <th className="px-3 py-3">IP</th>
@@ -121,7 +285,7 @@ export default function AuditLogsPage() {
                 {logs.length === 0 && (
                   <tr>
                     <td colSpan={6} className="py-6 text-center text-slate-500">
-                      Nenhum log registrado até o momento.
+                      Nenhum log registrado ate o momento.
                     </td>
                   </tr>
                 )}

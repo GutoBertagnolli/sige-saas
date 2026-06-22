@@ -107,8 +107,26 @@ model User {
 
   employee Employee?
   auditLogs AuditLog[]
+  sessions  UserSession[]
 
   @@unique([tenantId, email])
+}
+
+model UserSession {
+  id         String    @id @default(uuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id])
+  tokenId    String    @unique
+  ipAddress  String?
+  userAgent  String?
+  revokedAt  DateTime?
+  lastSeenAt DateTime  @default(now())
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@index([userId])
+  @@index([lastSeenAt])
+  @@index([revokedAt])
 }
 
 model Role {

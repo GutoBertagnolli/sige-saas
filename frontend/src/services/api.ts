@@ -1,6 +1,7 @@
 import axios from 'axios';
 
 const AUTH_TOKEN_KEY = 'sige_auth_token';
+const SESSION_EXPIRED_EVENT = 'sige:session-expired';
 
 export const api = axios.create({
   baseURL: '/api',
@@ -27,3 +28,17 @@ api.interceptors.request.use((config) => {
 
   return config;
 });
+
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error?.response?.status === 401 && getAuthToken()) {
+      clearAuthToken();
+      localStorage.removeItem('sige_admin_session');
+      localStorage.removeItem('sige_portal_session');
+      window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
+    }
+
+    return Promise.reject(error);
+  },
+);

@@ -1,6 +1,7 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
+import { randomUUID } from 'crypto';
 import { PrismaService } from '../common/prisma.service';
 
 @Injectable()
@@ -18,7 +19,13 @@ export class AuthService {
     };
   }
 
-  async login(email: string, password: string, tenantSlug: string, ipAddress?: string) {
+  async login(
+    email: string,
+    password: string,
+    tenantSlug: string,
+    ipAddress?: string,
+    userAgent?: string,
+  ) {
     const tenant = await this.prisma.tenant.findUnique({ where: { slug: tenantSlug } });
     if (!tenant || !tenant.active) throw new UnauthorizedException('Cliente inválido ou inativo');
 
@@ -49,6 +56,17 @@ export class AuthService {
     if (!ok) throw new UnauthorizedException('Usuário ou senha inválidos');
 
     await this.prisma.user.update({ where: { id: user.id }, data: { lastLogin: new Date() } });
+    const tokenId = randomUUID();
+
+    await this.prisma.userSession.create({
+      data: {
+        userId: user.id,
+        tokenId,
+        ipAddress: ipAddress || null,
+        userAgent: userAgent || null,
+      },
+    });
+
     await this.prisma.auditLog.create({
       data: {
         userId: user.id,
@@ -62,7 +80,13 @@ export class AuthService {
         ipAddress: ipAddress || null,
       },
     });
-    const token = this.jwt.sign({ sub: user.id, tenantId: tenant.id, roleId: user.roleId, email: user.email });
+    const token = this.jwt.sign({
+      sub: user.id,
+      tenantId: tenant.id,
+      roleId: user.roleId,
+      email: user.email,
+      sid: tokenId,
+    });
     return {
       token,
       user: this.buildUserResponse(user),
@@ -78,6 +102,20 @@ export class AuthService {
     try {
       payload = this.jwt.verify(token);
     } catch {
+      throw new UnauthorizedException('Sessao expirada. Entre novamente.');
+    }
+
+    if (!payload.sid) {
+      throw new UnauthorizedException('Sessao expirada. Entre novamente.');
+    }
+
+    const activeSession = await this.prisma.userSession.findUnique({
+      where: {
+        tokenId: payload.sid,
+      },
+    });
+
+    if (!activeSession || activeSession.revokedAt) {
       throw new UnauthorizedException('Sessao expirada. Entre novamente.');
     }
 
@@ -108,10 +146,24 @@ export class AuthService {
       throw new UnauthorizedException('Sessao expirada. Entre novamente.');
     }
 
+    await this.prisma.userSession.update({
+      where: {
+        tokenId: payload.sid,
+      },
+      data: {
+        lastSeenAt: new Date(),
+      },
+    });
+
     return {
       user: this.buildUserResponse(user),
       tenant: user.tenant,
     };
+  }
+
+  async heartbeat(authorization?: string) {
+    await this.me(authorization);
+    return { ok: true };
   }
 
   async updateProfile(authorization: string | undefined, data: { photoUrl?: string | null }) {

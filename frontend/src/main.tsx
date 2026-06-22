@@ -213,6 +213,10 @@ async function getCurrentSession() {
   return response.data;
 }
 
+async function sendHeartbeat() {
+  await api.post('/auth/heartbeat');
+}
+
 async function updateProfile(data: { photoUrl: string | null }) {
   const response = await api.put<Omit<AuthSession, 'token'>>('/auth/profile', data);
   return response.data;
@@ -919,6 +923,27 @@ function App() {
       })
       .finally(() => setCheckingSession(false));
   }, []);
+
+  React.useEffect(() => {
+    function expireSession() {
+      handleLogout();
+    }
+
+    window.addEventListener('sige:session-expired', expireSession);
+    return () => window.removeEventListener('sige:session-expired', expireSession);
+  }, []);
+
+  React.useEffect(() => {
+    if (!user) return;
+
+    const interval = window.setInterval(() => {
+      sendHeartbeat().catch(() => {
+        handleLogout();
+      });
+    }, 60_000);
+
+    return () => window.clearInterval(interval);
+  }, [user?.id]);
 
   function handleLogin(session: AuthSession) {
     setAuthToken(session.token);

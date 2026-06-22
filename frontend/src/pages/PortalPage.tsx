@@ -112,6 +112,10 @@ async function getSubstitutions(employeeId: string) {
   return response.data;
 }
 
+async function sendHeartbeat() {
+  await api.post('/auth/heartbeat');
+}
+
 function formatSchedule(substitution: Substitution) {
   const weekday = substitution.weekday
     ? WEEKDAY_LABELS[substitution.weekday] ?? substitution.weekday
@@ -202,6 +206,27 @@ export default function PortalPage() {
       loadPortalData(employee, nextSchoolId);
     }
   }, [employee?.id]);
+
+  useEffect(() => {
+    function expireSession() {
+      handleLogout();
+    }
+
+    window.addEventListener('sige:session-expired', expireSession);
+    return () => window.removeEventListener('sige:session-expired', expireSession);
+  }, []);
+
+  useEffect(() => {
+    if (!user) return;
+
+    const interval = window.setInterval(() => {
+      sendHeartbeat().catch(() => {
+        handleLogout();
+      });
+    }, 60_000);
+
+    return () => window.clearInterval(interval);
+  }, [user?.id]);
 
   async function loadPortalData(currentEmployee: PortalEmployee, schoolIdOverride?: string) {
     setAnnouncementsError('');

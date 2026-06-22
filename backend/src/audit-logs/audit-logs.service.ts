@@ -3,6 +3,7 @@ import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../common/prisma.service';
 
 const AUDIT_ROLES = new Set(['SECRETARIA', 'ADMIN', 'ADMINISTRADOR']);
+const ONLINE_WINDOW_MINUTES = 5;
 const SENSITIVE_KEYS = new Set([
   'password',
   'passwordHash',
@@ -26,6 +27,15 @@ export class AuditLogsService {
 
     try {
       const payload: any = this.jwt.verify(token);
+      if (!payload.sid) return null;
+
+      const session = await this.prisma.userSession.findUnique({
+        where: {
+          tokenId: payload.sid,
+        },
+      });
+
+      if (!session || session.revokedAt) return null;
 
       return this.prisma.user.findUnique({
         where: { id: payload.sub },
@@ -44,6 +54,25 @@ export class AuditLogsService {
       });
     } catch {
       return null;
+    }
+  }
+
+  private getSessionPayload(authorization?: string) {
+    const token = authorization?.replace(/^Bearer\s+/i, '').trim();
+    if (!token) {
+      throw new UnauthorizedException('Sessao expirada. Entre novamente.');
+    }
+
+    try {
+      const payload: any = this.jwt.verify(token);
+
+      if (!payload.sid) {
+        throw new UnauthorizedException('Sessao expirada. Entre novamente.');
+      }
+
+      return payload;
+    } catch {
+      throw new UnauthorizedException('Sessao expirada. Entre novamente.');
     }
   }
 
@@ -122,5 +151,148 @@ export class AuditLogsService {
       },
       take: 500,
     });
+  }
+
+  async findOnlineSessions(authorization?: string) {
+    const actor = await this.assertCanView(authorization);
+    const payload = this.getSessionPayload(authorization);
+    const onlineSince = new Date(Date.now() - ONLINE_WINDOW_MINUTES * 60 * 1000);
+
+    const sessions = await this.prisma.userSession.findMany({
+      where: {
+        revokedAt: null,
+        lastSeenAt: {
+          gte: onlineSince,
+        },
+        user: {
+          tenantId: actor.tenantId,
+        },
+      },
+      include: {
+        user: {
+          include: {
+            role: true,
+            employee: {
+              include: {
+                school: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: {
+        lastSeenAt: 'desc',
+      },
+      take: 200,
+    });
+
+    return sessions.map((session) => ({
+      id: session.id,
+      ipAddress: session.ipAddress,
+      userAgent: session.userAgent,
+      lastSeenAt: session.lastSeenAt,
+      createdAt: session.createdAt,
+      isCurrentSession: session.tokenId === payload.sid,
+      user: {
+        id: session.user.id,
+        name: session.user.name,
+        email: session.user.email,
+        role: session.user.role,
+        employee: session.user.employee,
+      },
+    }));
+  }
+
+  async revokeSession(id: string, authorization?: string) {
+    const actor = await this.assertCanView(authorization);
+    const payload = this.getSessionPayload(authorization);
+
+    const session = await this.prisma.userSession.findUnique({
+      where: {
+        id,
+      },
+      include: {
+        user: true,
+      },
+    });
+
+    if (!session || session.user.tenantId !== actor.tenantId) {
+      throw new ForbiddenException('Sessao nao encontrada.');
+    }
+
+    if (session.tokenId === payload.sid) {
+      throw new ForbiddenException('Use sair para encerrar a sua propria sessao.');
+    }
+
+    await this.prisma.userSession.update({
+      where: {
+        id,
+      },
+      data: {
+        revokedAt: new Date(),
+      },
+    });
+
+    await this.record({
+      userId: actor.id,
+      entity: 'Sessao',
+      entityId: session.id,
+      action: 'FORCE_LOGOFF',
+      newData: {
+        name: session.user.name,
+        email: session.user.email,
+        ipAddress: session.ipAddress,
+      },
+    });
+
+    return this.findOnlineSessions(authorization);
+  }
+
+  async revokeOtherOnlineSessions(authorization?: string) {
+    const actor = await this.assertCanView(authorization);
+    const payload = this.getSessionPayload(authorization);
+    const onlineSince = new Date(Date.now() - ONLINE_WINDOW_MINUTES * 60 * 1000);
+
+    const sessions = await this.prisma.userSession.findMany({
+      where: {
+        revokedAt: null,
+        tokenId: {
+          not: payload.sid,
+        },
+        lastSeenAt: {
+          gte: onlineSince,
+        },
+        user: {
+          tenantId: actor.tenantId,
+        },
+      },
+      include: {
+        user: true,
+      },
+    });
+
+    if (sessions.length > 0) {
+      await this.prisma.userSession.updateMany({
+        where: {
+          id: {
+            in: sessions.map((session) => session.id),
+          },
+        },
+        data: {
+          revokedAt: new Date(),
+        },
+      });
+
+      await this.record({
+        userId: actor.id,
+        entity: 'Sessao',
+        action: 'FORCE_LOGOFF_ALL',
+        newData: {
+          totalItems: sessions.length,
+        },
+      });
+    }
+
+    return this.findOnlineSessions(authorization);
   }
 }

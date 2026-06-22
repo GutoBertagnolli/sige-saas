@@ -26,12 +26,23 @@ export class AuthController {
 
   @Post('login')
   login(@Body() dto: LoginDto, @Req() request: any) {
-    return this.auth.login(dto.email, dto.password, dto.tenantSlug, getClientIp(request) || undefined);
+    return this.auth.login(
+      dto.email,
+      dto.password,
+      dto.tenantSlug,
+      getClientIp(request) || undefined,
+      request.headers?.['user-agent'],
+    );
   }
 
   @Get('me')
   me(@Headers('authorization') authorization?: string) {
     return this.auth.me(authorization);
+  }
+
+  @Post('heartbeat')
+  heartbeat(@Headers('authorization') authorization?: string) {
+    return this.auth.heartbeat(authorization);
   }
 
   @Put('profile')
