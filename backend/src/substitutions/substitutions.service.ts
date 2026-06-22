@@ -223,10 +223,40 @@ export class SubstitutionsService {
     return Array.from(new Set(schoolIds));
   }
 
-  async findAll() {
+  async findAll(schoolIds?: string[]) {
     await this.autoAcceptExpired();
 
     const substitutions = await this.prisma.substitution.findMany({
+      where: schoolIds
+        ? {
+            OR: [
+              {
+                classSchedule: {
+                  class: {
+                    schoolId: { in: schoolIds },
+                  },
+                },
+              },
+              {
+                absence: {
+                  employee: {
+                    OR: [
+                      { schoolId: { in: schoolIds } },
+                      {
+                        assignments: {
+                          some: {
+                            schoolId: { in: schoolIds },
+                            active: true,
+                          },
+                        },
+                      },
+                    ],
+                  },
+                },
+              },
+            ],
+          }
+        : undefined,
       include: {
         absence: {
           include: {

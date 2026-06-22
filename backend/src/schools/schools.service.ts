@@ -46,10 +46,11 @@ export class SchoolsService {
     return firstActiveTenant.id;
   }
 
-  findAll() {
+  findAll(schoolIds?: string[]) {
     return this.prisma.school.findMany({
       where: {
         active: true,
+        id: schoolIds ? { in: schoolIds } : undefined,
       },
       orderBy: {
         name: 'asc',

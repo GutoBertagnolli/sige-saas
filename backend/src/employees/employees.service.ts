@@ -314,9 +314,25 @@ export class EmployeesService {
     );
   }
 
-  findAll() {
-    return this.prisma.employee.findMany({
-      where: { active: true },
+  async findAll(schoolIds?: string[]) {
+    const scopedSchoolIds = schoolIds ? new Set(schoolIds) : null;
+    const employees = await this.prisma.employee.findMany({
+      where: {
+        active: true,
+        OR: schoolIds
+          ? [
+              { schoolId: { in: schoolIds } },
+              {
+                assignments: {
+                  some: {
+                    schoolId: { in: schoolIds },
+                    active: true,
+                  },
+                },
+              },
+            ]
+          : undefined,
+      },
       include: {
         school: true,
         assignments: {
@@ -339,6 +355,18 @@ export class EmployeesService {
         name: 'asc',
       },
     });
+
+    if (!scopedSchoolIds) {
+      return employees;
+    }
+
+    return employees.map((employee) => ({
+      ...employee,
+      school: employee.school?.id && scopedSchoolIds.has(employee.school.id) ? employee.school : null,
+      assignments: employee.assignments.filter((assignment) =>
+        scopedSchoolIds.has(assignment.schoolId),
+      ),
+    }));
   }
 
   async getAssignedSchoolIds(id: string) {

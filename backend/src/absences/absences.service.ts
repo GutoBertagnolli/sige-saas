@@ -35,10 +35,27 @@ export class AbsencesService {
     });
   }
 
-  async findAll() {
+  async findAll(schoolIds?: string[]) {
     await this.autoAcceptExpiredSubstitutions();
 
     return this.prisma.absence.findMany({
+      where: {
+        employee: schoolIds
+          ? {
+              OR: [
+                { schoolId: { in: schoolIds } },
+                {
+                  assignments: {
+                    some: {
+                      schoolId: { in: schoolIds },
+                      active: true,
+                    },
+                  },
+                },
+              ],
+            }
+          : undefined,
+      },
       include: {
         employee: {
           include: {

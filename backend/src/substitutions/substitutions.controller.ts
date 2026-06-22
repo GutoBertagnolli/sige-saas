@@ -1,6 +1,7 @@
 import { Body, Controller, Delete, ForbiddenException, Get, Headers, Param, Post, Put, Req } from '@nestjs/common';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { getClientIp } from '../common/client-ip';
+import { getSchoolScope } from '../common/school-scope';
 import { SubstitutionsService } from './substitutions.service';
 
 @Controller('substitutions')
@@ -37,8 +38,9 @@ export class SubstitutionsController {
   }
 
   @Get()
-  findAll() {
-    return this.service.findAll();
+  async findAll(@Headers('authorization') authorization?: string) {
+    const actor = await this.audit.getActor(authorization);
+    return this.service.findAll(getSchoolScope(actor));
   }
 
   @Get('substitute/:employeeId')

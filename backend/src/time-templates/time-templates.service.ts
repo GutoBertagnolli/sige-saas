@@ -5,9 +5,12 @@ import { PrismaService } from '../common/prisma.service';
 export class TimeTemplatesService {
   constructor(private prisma: PrismaService) {}
 
-  findAll() {
+  findAll(schoolIds?: string[]) {
     return this.prisma.schoolTimeTemplate.findMany({
-      where: { active: true },
+      where: {
+        active: true,
+        schoolId: schoolIds ? { in: schoolIds } : undefined,
+      },
       include: {
         school: true,
         slots: {
@@ -16,6 +19,15 @@ export class TimeTemplatesService {
       },
       orderBy: { name: 'asc' },
     });
+  }
+
+  async getSchoolId(id: string) {
+    const template = await this.prisma.schoolTimeTemplate.findUnique({
+      where: { id },
+      select: { schoolId: true },
+    });
+
+    return template?.schoolId ?? null;
   }
 
   create(data: any) {

@@ -5,9 +5,12 @@ import { PrismaService } from '../common/prisma.service';
 export class ClassesService {
   constructor(private prisma: PrismaService) {}
 
-  findAll() {
+  findAll(schoolIds?: string[]) {
     return this.prisma.class.findMany({
-      where: { active: true },
+      where: {
+        active: true,
+        schoolId: schoolIds ? { in: schoolIds } : undefined,
+      },
       include: {
         school: true,
         template: true,
@@ -16,6 +19,15 @@ export class ClassesService {
         name: 'asc',
       },
     });
+  }
+
+  async getSchoolId(id: string) {
+    const classItem = await this.prisma.class.findUnique({
+      where: { id },
+      select: { schoolId: true },
+    });
+
+    return classItem?.schoolId ?? null;
   }
 
   create(data: {
