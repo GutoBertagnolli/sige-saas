@@ -330,8 +330,8 @@ export default function EmployeesPage() {
       await queryClient.invalidateQueries({ queryKey: ['employees'] });
       closeModal();
     },
-    onError: () => {
-      alert('Erro ao salvar servidor.');
+    onError: (error: any) => {
+      alert(error?.response?.data?.message ?? 'Erro ao salvar servidor.');
     },
   });
 

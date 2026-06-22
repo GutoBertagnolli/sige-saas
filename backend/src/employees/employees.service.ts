@@ -341,6 +341,32 @@ export class EmployeesService {
     });
   }
 
+  async getAssignedSchoolIds(id: string) {
+    const employee = await this.prisma.employee.findUnique({
+      where: { id },
+      include: {
+        assignments: {
+          where: {
+            active: true,
+          },
+        },
+      },
+    });
+
+    if (!employee) {
+      return [];
+    }
+
+    return Array.from(
+      new Set(
+        [
+          employee.schoolId,
+          ...employee.assignments.map((assignment) => assignment.schoolId),
+        ].filter(Boolean) as string[],
+      ),
+    );
+  }
+
   async create(data: {
     tenantId?: string;
     schoolId?: string;
