@@ -156,6 +156,7 @@ model School {
   templates       SchoolTimeTemplate[]
   classes         Class[]
   employees       Employee[]
+  employeeAssignments EmployeeAssignment[] @relation("AssignmentSchool")
   weeklySchedules EmployeeWeeklySchedule[]
 }
 
@@ -212,6 +213,7 @@ model EmployeeAssignment {
   employeeId    String
   employee      Employee         @relation(fields: [employeeId], references: [id])
   schoolId      String
+  school        School           @relation("AssignmentSchool", fields: [schoolId], references: [id])
   functionId    String
   function      EmployeeFunction @relation(fields: [functionId], references: [id])
   subjectId     String?

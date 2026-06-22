@@ -10,6 +10,7 @@ type Employee = {
   assignments?: Array<{
     subject?: { id: string; name: string } | null;
     function?: { name: string } | null;
+    school?: { id: string; name: string } | null;
   }>;
 };
 
@@ -101,6 +102,26 @@ function getEmployeeSubject(employee?: Employee) {
   return employee?.assignments?.find((assignment) => assignment.subject)?.subject ?? null;
 }
 
+function getEmployeeSchools(employee?: Employee) {
+  if (!employee) return [];
+
+  const schools = new Map<string, { id: string; name: string }>();
+
+  if (employee.school?.id) {
+    schools.set(employee.school.id, employee.school);
+  }
+
+  employee.assignments?.forEach((assignment) => {
+    if (assignment.school?.id) {
+      schools.set(assignment.school.id, assignment.school);
+    }
+  });
+
+  return Array.from(schools.values()).sort((first, second) =>
+    first.name.localeCompare(second.name),
+  );
+}
+
 function getSlotTimeKey(slot?: { startTime?: string | null; endTime?: string | null } | null) {
   return slot?.startTime && slot.endTime ? `${slot.startTime}-${slot.endTime}` : '';
 }
@@ -180,6 +201,11 @@ export default function EmployeePlannerPage() {
 
   const employee = employees.find((item) => item.id === employeeId);
   const employeeSubject = getEmployeeSubject(employee);
+  const employeeSchools = useMemo(() => getEmployeeSchools(employee), [employee]);
+  const employeeSchoolIds = useMemo(
+    () => new Set(employeeSchools.map((school) => school.id)),
+    [employeeSchools],
+  );
 
   const isAllTemplatesSelected = selectedTemplateId === ALL_TEMPLATES_ID;
 
@@ -254,7 +280,7 @@ export default function EmployeePlannerPage() {
     [slots],
   );
   const availableClasses = classes.filter((item) => {
-    if (employee?.school?.id && item.school?.id !== employee.school.id) {
+    if (employeeSchoolIds.size > 0 && (!item.school?.id || !employeeSchoolIds.has(item.school.id))) {
       return false;
     }
 
@@ -591,13 +617,19 @@ export default function EmployeePlannerPage() {
   }
 
   function savePlanner() {
-    if (!employee?.school?.id) {
-      alert('Este servidor precisa ter escola principal cadastrada.');
+    if (employeeSchoolIds.size === 0) {
+      alert('Este servidor precisa ter escola cadastrada.');
       return;
     }
 
     if (localCells.some((cell) => !cell.classId)) {
       alert('Todos os horarios marcados precisam estar vinculados a uma turma.');
+      return;
+    }
+
+    const cellWithoutSchool = localCells.find((cell) => !classById.get(cell.classId)?.school?.id);
+    if (cellWithoutSchool) {
+      alert('Todas as turmas do planner precisam estar vinculadas a uma escola.');
       return;
     }
 
@@ -610,7 +642,7 @@ export default function EmployeePlannerPage() {
     const items = uniqueCells.map((cell) => ({
       tenantId: TENANT_ID,
       employeeId,
-      schoolId: employee.school!.id,
+      schoolId: classById.get(cell.classId)?.school?.id,
       classId: cell.classId,
       timeSlotId: cell.timeSlotId,
       weekday: cell.weekday,
@@ -640,7 +672,7 @@ export default function EmployeePlannerPage() {
             <h2 className="text-lg font-semibold">Planner semanal</h2>
             <p className="text-sm text-slate-500">
               {employee?.name || 'Servidor'} •{' '}
-              {employee?.school?.name || 'Sem escola vinculada'} •{' '}
+              {employeeSchools.map((school) => school.name).join(', ') || 'Sem escola vinculada'} •{' '}
               {employeeSubject?.name || 'Sem disciplina cadastrada'}
             </p>
           </div>

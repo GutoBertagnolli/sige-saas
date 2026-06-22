@@ -107,6 +107,48 @@ export class AbsencesService {
     });
   }
 
+  async getManagedSchoolIds(data: any = {}, absenceId?: string) {
+    let employeeId = data.employeeId;
+
+    if (!employeeId && absenceId) {
+      const absence = await this.prisma.absence.findUnique({
+        where: {
+          id: absenceId,
+        },
+        select: {
+          employeeId: true,
+        },
+      });
+      employeeId = absence?.employeeId;
+    }
+
+    if (!employeeId) {
+      return [];
+    }
+
+    const employee = await this.prisma.employee.findUnique({
+      where: {
+        id: employeeId,
+      },
+      include: {
+        assignments: {
+          where: {
+            active: true,
+          },
+        },
+      },
+    });
+
+    return Array.from(
+      new Set(
+        [
+          employee?.schoolId,
+          ...(employee?.assignments.map((assignment) => assignment.schoolId) ?? []),
+        ].filter(Boolean) as string[],
+      ),
+    );
+  }
+
   async create(data: any) {
     const existingAbsence = await this.prisma.absence.findFirst({
       where: {
@@ -228,10 +270,25 @@ export class AbsencesService {
             },
           })
         : null;
+      const targetSchoolId = schedule.schoolId || classSchedule?.class?.schoolId || employee.schoolId;
+
+      if (!targetSchoolId) {
+        continue;
+      }
 
       const availableEmployees = await this.prisma.employee.findMany({
         where: {
-          schoolId: employee.schoolId,
+          OR: [
+            { schoolId: targetSchoolId },
+            {
+              assignments: {
+                some: {
+                  schoolId: targetSchoolId,
+                  active: true,
+                },
+              },
+            },
+          ],
           id: {
             notIn: Array.from(absentEmployeeIds),
           },
@@ -242,7 +299,9 @@ export class AbsencesService {
             where: {
               active: true,
               weekday: schedule.weekday,
-              timeSlotId: schedule.timeSlotId,
+            },
+            include: {
+              timeSlot: true,
             },
           },
         },
@@ -257,12 +316,34 @@ export class AbsencesService {
       const ranked = availableEmployees
         .filter((candidate) => !busySubstituteIds.has(candidate.id))
         .map((candidate) => {
-          const slot = candidate.weeklySchedules[0];
+          const slotTimeKey = schedule.timeSlot
+            ? `${schedule.timeSlot.startTime}-${schedule.timeSlot.endTime}`
+            : '';
+          const slotsAtSameTime = candidate.weeklySchedules.filter((candidateSchedule) => {
+            if (candidateSchedule.timeSlotId === schedule.timeSlotId) {
+              return true;
+            }
+
+            if (!slotTimeKey || !candidateSchedule.timeSlot) {
+              return false;
+            }
+
+            return `${candidateSchedule.timeSlot.startTime}-${candidateSchedule.timeSlot.endTime}` === slotTimeKey;
+          });
+          const busyInAnotherSchool = slotsAtSameTime.some(
+            (candidateSchedule) => candidateSchedule.schoolId !== targetSchoolId,
+          );
+          const slot = slotsAtSameTime.find(
+            (candidateSchedule) => candidateSchedule.schoolId === targetSchoolId,
+          );
 
           let priority = 99;
           let reason = 'Indisponível neste horário';
 
-          if (slot?.type === 'HORA_ATIVIDADE') {
+          if (busyInAnotherSchool) {
+            priority = 99;
+            reason = 'Servidor esta em outra escola neste horario';
+          } else if (slot?.type === 'HORA_ATIVIDADE') {
             priority = 1;
             reason = 'Hora atividade';
           } else if (!slot && candidate.roleType === 'PROFESSOR') {

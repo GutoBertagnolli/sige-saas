@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../common/prisma.service';
@@ -162,6 +162,58 @@ export class EmployeesService {
     });
   }
 
+  private formatRoleFunctionName(roleType: string) {
+    const roleLabels: Record<string, string> = {
+      PROFESSOR: 'Professor',
+      AUXILIAR: 'Auxiliar',
+      ORIENTADOR: 'Orientador',
+      DIRETOR: 'Diretor',
+      SECRETARIA: 'Secretaria',
+      SERVICOS_GERAIS: 'Serviços Gerais',
+    };
+
+    return roleLabels[roleType] ?? roleType.replace(/_/g, ' ');
+  }
+
+  private async findOrCreateEmployeeFunction(
+    tenantId: string,
+    roleType: string,
+    client: Pick<PrismaService, 'employeeFunction'> = this.prisma,
+  ) {
+    const name = this.formatRoleFunctionName(roleType);
+    const existing = await client.employeeFunction.findFirst({
+      where: {
+        tenantId,
+        name,
+      },
+    });
+
+    if (existing) {
+      return existing;
+    }
+
+    return client.employeeFunction.create({
+      data: {
+        tenantId,
+        name,
+        requiresSubject: roleType === 'PROFESSOR',
+      },
+    });
+  }
+
+  private normalizeSchoolIds(primarySchoolId?: string | null, schoolIds?: string[] | null) {
+    const ids = [primarySchoolId, ...(schoolIds ?? [])]
+      .map((item) => item?.trim())
+      .filter(Boolean) as string[];
+    const uniqueIds = Array.from(new Set(ids));
+
+    if (uniqueIds.length > 5) {
+      throw new BadRequestException('O servidor pode ser vinculado a no máximo 5 escolas.');
+    }
+
+    return uniqueIds;
+  }
+
   private async findOrCreateSubject(
     tenantId: string,
     subjectName?: string | null,
@@ -210,10 +262,11 @@ export class EmployeesService {
     });
   }
 
-  private async replaceTeacherSubjectAssignment(
+  private async replaceEmployeeAssignments(
     employeeId: string,
     tenantId: string,
-    schoolId?: string | null,
+    schoolIds: string[],
+    roleType: string,
     subjectName?: string | null,
     subjectId?: string | null,
     client: Pick<
@@ -232,24 +285,33 @@ export class EmployeesService {
     });
 
     const subject =
-      (await this.findSubjectById(tenantId, subjectId, client)) ||
-      (await this.findOrCreateSubject(tenantId, subjectName, client));
+      roleType === 'PROFESSOR'
+        ? (await this.findSubjectById(tenantId, subjectId, client)) ||
+          (await this.findOrCreateSubject(tenantId, subjectName, client))
+        : null;
 
-    if (!subject || !schoolId) {
+    if (schoolIds.length === 0) {
       return null;
     }
 
-    const teacherFunction = await this.findOrCreateTeacherFunction(tenantId, client);
+    const employeeFunction =
+      roleType === 'PROFESSOR'
+        ? await this.findOrCreateTeacherFunction(tenantId, client)
+        : await this.findOrCreateEmployeeFunction(tenantId, roleType, client);
 
-    return client.employeeAssignment.create({
-      data: {
-        employeeId,
-        schoolId,
-        functionId: teacherFunction.id,
-        subjectId: subject.id,
-        active: true,
-      },
-    });
+    return Promise.all(
+      schoolIds.map((schoolId) =>
+        client.employeeAssignment.create({
+          data: {
+            employeeId,
+            schoolId,
+            functionId: employeeFunction.id,
+            subjectId: subject?.id ?? null,
+            active: true,
+          },
+        }),
+      ),
+    );
   }
 
   findAll() {
@@ -264,6 +326,7 @@ export class EmployeesService {
           include: {
             function: true,
             subject: true,
+            school: true,
           },
         },
         user: {
@@ -290,9 +353,11 @@ export class EmployeesService {
     roleType?: string;
     subjectName?: string;
     subjectId?: string;
+    schoolIds?: string[];
   }) {
     const tenantId = await this.resolveTenantId(data.tenantId);
     const roleType = this.normalizeRoleType(data.roleType);
+    const schoolIds = this.normalizeSchoolIds(data.schoolId, data.schoolIds);
     const loginEmail = await this.buildUniqueLoginEmail(this.prisma, tenantId!, data);
     const initialPassword = this.generatePassword();
     const role = await this.findOrCreateRole(tenantId!, roleType);
@@ -316,7 +381,7 @@ export class EmployeesService {
       const createdEmployee = await transaction.employee.create({
         data: {
           tenantId: tenantId!,
-          schoolId: data.schoolId || null,
+          schoolId: schoolIds[0] || null,
           name: data.name,
           cpf: data.cpf || null,
           birthDate: data.birthDate || null,
@@ -337,6 +402,7 @@ export class EmployeesService {
             include: {
               function: true,
               subject: true,
+              school: true,
             },
           },
           user: {
@@ -347,10 +413,11 @@ export class EmployeesService {
         },
       });
 
-      await this.replaceTeacherSubjectAssignment(
+      await this.replaceEmployeeAssignments(
         createdEmployee.id,
         tenantId!,
-        data.schoolId || null,
+        schoolIds,
+        roleType,
         data.subjectName,
         data.subjectId,
         transaction,
@@ -369,6 +436,7 @@ export class EmployeesService {
             include: {
               function: true,
               subject: true,
+              school: true,
             },
           },
           user: {
@@ -382,7 +450,7 @@ export class EmployeesService {
   }
 
   async update(id: string, data: any) {
-    const { subjectName, subjectId, ...employeeData } = data;
+    const { subjectName, subjectId, schoolIds: rawSchoolIds, ...employeeData } = data;
 
     if (employeeData.roleType) {
       employeeData.roleType = this.normalizeRoleType(employeeData.roleType);
@@ -398,6 +466,7 @@ export class EmployeesService {
           },
           include: {
             subject: true,
+            school: true,
           },
         },
         user: {
@@ -412,6 +481,20 @@ export class EmployeesService {
       throw new Error('Servidor não encontrado.');
     }
 
+    const currentSchoolIds = employee.assignments.map((assignment) => assignment.schoolId);
+    const nextSchoolIds =
+      rawSchoolIds !== undefined
+        ? this.normalizeSchoolIds(employeeData.schoolId ?? employee.schoolId, rawSchoolIds)
+        : employeeData.schoolId !== undefined
+          ? this.normalizeSchoolIds(employeeData.schoolId, currentSchoolIds)
+          : currentSchoolIds.length
+            ? currentSchoolIds
+            : this.normalizeSchoolIds(employee.schoolId, []);
+
+    if (employeeData.schoolId === undefined && nextSchoolIds.length > 0) {
+      employeeData.schoolId = nextSchoolIds[0];
+    }
+
     const updatedEmployee = await this.prisma.employee.update({
       where: { id },
       data: employeeData,
@@ -424,6 +507,7 @@ export class EmployeesService {
           include: {
             function: true,
             subject: true,
+            school: true,
           },
         },
         user: {
@@ -434,7 +518,13 @@ export class EmployeesService {
       },
     });
 
-    if (subjectName !== undefined || subjectId !== undefined || employeeData.schoolId !== undefined) {
+    if (
+      subjectName !== undefined ||
+      subjectId !== undefined ||
+      employeeData.schoolId !== undefined ||
+      rawSchoolIds !== undefined ||
+      employeeData.roleType !== undefined
+    ) {
       const nextSubjectName =
         subjectName !== undefined
           ? subjectName
@@ -444,10 +534,11 @@ export class EmployeesService {
           ? subjectId
           : employee.assignments[0]?.subject?.id ?? null;
 
-      await this.replaceTeacherSubjectAssignment(
+      await this.replaceEmployeeAssignments(
         id,
         employee.tenantId,
-        employeeData.schoolId ?? updatedEmployee.schoolId,
+        nextSchoolIds,
+        employeeData.roleType ?? employee.roleType,
         nextSubjectName,
         nextSubjectId,
       );
@@ -476,6 +567,7 @@ export class EmployeesService {
             include: {
               function: true,
               subject: true,
+              school: true,
             },
           },
           user: {
@@ -498,6 +590,7 @@ export class EmployeesService {
           include: {
             function: true,
             subject: true,
+            school: true,
           },
         },
         user: {

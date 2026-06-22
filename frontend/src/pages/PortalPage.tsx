@@ -10,6 +10,13 @@ type PortalEmployee = {
     id: string;
     name: string;
   } | null;
+  assignments?: Array<{
+    schoolId?: string | null;
+    school?: {
+      id: string;
+      name: string;
+    } | null;
+  }>;
 };
 
 type PortalUser = {
@@ -49,6 +56,19 @@ type Substitution = {
   absence?: {
     employee?: {
       name: string;
+      school?: {
+        id: string;
+        name: string;
+      } | null;
+    } | null;
+  } | null;
+  classSchedule?: {
+    class?: {
+      schoolId?: string | null;
+      school?: {
+        id: string;
+        name: string;
+      } | null;
     } | null;
   } | null;
 };
@@ -103,6 +123,35 @@ function formatSchedule(substitution: Substitution) {
   return `${weekday} • ${time}`;
 }
 
+function getEmployeeSchools(employee?: PortalEmployee | null) {
+  if (!employee) return [];
+
+  const schools = new Map<string, { id: string; name: string }>();
+
+  if (employee.school?.id) {
+    schools.set(employee.school.id, employee.school);
+  }
+
+  employee.assignments?.forEach((assignment) => {
+    if (assignment.school?.id) {
+      schools.set(assignment.school.id, assignment.school);
+    }
+  });
+
+  return Array.from(schools.values()).sort((first, second) =>
+    first.name.localeCompare(second.name),
+  );
+}
+
+function getSubstitutionSchoolId(substitution: Substitution) {
+  return (
+    substitution.classSchedule?.class?.school?.id ??
+    substitution.classSchedule?.class?.schoolId ??
+    substitution.absence?.employee?.school?.id ??
+    null
+  );
+}
+
 export default function PortalPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -122,25 +171,48 @@ export default function PortalPage() {
   const [loading, setLoading] = useState(false);
   const [announcementsError, setAnnouncementsError] = useState('');
   const [substitutionsError, setSubstitutionsError] = useState('');
+  const [selectedSchoolId, setSelectedSchoolId] = useState('');
 
   const employee = user?.employee ?? null;
+  const employeeSchools = useMemo(() => getEmployeeSchools(employee), [employee]);
+  const activeSchoolId = selectedSchoolId || employeeSchools[0]?.id || employee?.schoolId || '';
+  const activeSchoolName =
+    employeeSchools.find((school) => school.id === activeSchoolId)?.name ??
+    employee?.school?.name ??
+    'Sem escola vinculada';
   const pendingSubstitutions = useMemo(
-    () => substitutions.filter((item) => item.status !== 'DECLINED'),
-    [substitutions],
+    () =>
+      substitutions.filter((item) => {
+        if (item.status === 'DECLINED') return false;
+
+        const substitutionSchoolId = getSubstitutionSchoolId(item);
+        return !activeSchoolId || !substitutionSchoolId || substitutionSchoolId === activeSchoolId;
+      }),
+    [substitutions, activeSchoolId],
   );
 
   useEffect(() => {
     if (employee) {
-      loadPortalData(employee);
+      const nextSchoolId = selectedSchoolId || employeeSchools[0]?.id || employee.schoolId || '';
+
+      if (nextSchoolId && nextSchoolId !== selectedSchoolId) {
+        setSelectedSchoolId(nextSchoolId);
+      }
+
+      loadPortalData(employee, nextSchoolId);
     }
   }, [employee?.id]);
 
-  async function loadPortalData(currentEmployee: PortalEmployee) {
+  async function loadPortalData(currentEmployee: PortalEmployee, schoolIdOverride?: string) {
     setAnnouncementsError('');
     setSubstitutionsError('');
+    const scopedEmployee = {
+      ...currentEmployee,
+      schoolId: schoolIdOverride || currentEmployee.schoolId,
+    };
 
     try {
-      const loadedAnnouncements = await getAnnouncements(currentEmployee);
+      const loadedAnnouncements = await getAnnouncements(scopedEmployee);
       setAnnouncements(loadedAnnouncements);
     } catch (error: any) {
       setAnnouncements([]);
@@ -170,7 +242,10 @@ export default function PortalPage() {
       setUser(result.user);
 
       if (result.user.employee) {
-        await loadPortalData(result.user.employee);
+        const schools = getEmployeeSchools(result.user.employee);
+        const nextSchoolId = schools[0]?.id || result.user.employee.schoolId || '';
+        setSelectedSchoolId(nextSchoolId);
+        await loadPortalData(result.user.employee, nextSchoolId);
       }
     } catch (error: any) {
       alert(error?.response?.data?.message ?? 'Erro ao entrar no portal.');
@@ -187,13 +262,14 @@ export default function PortalPage() {
     setSubstitutions([]);
     setEmail('');
     setPassword('');
+    setSelectedSchoolId('');
   }
 
   async function updateSubstitution(id: string, action: 'accept' | 'decline') {
     await api.put(`/substitutions/${id}/${action}`);
 
     if (employee) {
-      await loadPortalData(employee);
+      await loadPortalData(employee, activeSchoolId);
     }
   }
 
@@ -251,8 +327,31 @@ export default function PortalPage() {
             </button>
           </div>
           <p className="text-sm text-slate-500">
-            {employee?.name ?? user.name} • {employee?.school?.name ?? 'Sem escola vinculada'}
+            {employee?.name ?? user.name} • {activeSchoolName}
           </p>
+
+          {employeeSchools.length > 1 && (
+            <div className="mt-4 max-w-md">
+              <label className="text-sm font-medium">Escola de acesso</label>
+              <select
+                value={activeSchoolId}
+                onChange={async (event) => {
+                  const nextSchoolId = event.target.value;
+                  setSelectedSchoolId(nextSchoolId);
+                  if (employee) {
+                    await loadPortalData(employee, nextSchoolId);
+                  }
+                }}
+                className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
+              >
+                {employeeSchools.map((school) => (
+                  <option key={school.id} value={school.id}>
+                    {school.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
 
         <div className="rounded-2xl border bg-white p-5 shadow-sm">

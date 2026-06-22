@@ -29,6 +29,16 @@ export class AuthService {
         employee: {
           include: {
             school: true,
+            assignments: {
+              where: {
+                active: true,
+              },
+              include: {
+                school: true,
+                function: true,
+                subject: true,
+              },
+            },
           },
         },
       },
@@ -79,6 +89,16 @@ export class AuthService {
         employee: {
           include: {
             school: true,
+            assignments: {
+              where: {
+                active: true,
+              },
+              include: {
+                school: true,
+                function: true,
+                subject: true,
+              },
+            },
           },
         },
       },
@@ -116,6 +136,16 @@ export class AuthService {
         employee: {
           include: {
             school: true,
+            assignments: {
+              where: {
+                active: true,
+              },
+              include: {
+                school: true,
+                function: true,
+                subject: true,
+              },
+            },
           },
         },
       },

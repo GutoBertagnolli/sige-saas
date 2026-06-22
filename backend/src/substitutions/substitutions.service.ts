@@ -83,6 +83,146 @@ export class SubstitutionsService {
     };
   }
 
+  private getTimeKey(timeSlot?: { startTime?: string | null; endTime?: string | null } | null) {
+    return timeSlot?.startTime && timeSlot.endTime
+      ? `${timeSlot.startTime}-${timeSlot.endTime}`
+      : '';
+  }
+
+  private isSameTimeSlot(
+    candidateSchedule: { timeSlotId?: string | null; timeSlot?: { startTime?: string | null; endTime?: string | null } | null },
+    timeSlotId?: string | null,
+    timeKey?: string,
+  ) {
+    if (candidateSchedule.timeSlotId === timeSlotId) {
+      return true;
+    }
+
+    return Boolean(timeKey && this.getTimeKey(candidateSchedule.timeSlot) === timeKey);
+  }
+
+  private async assertSubstituteCanActInSchool(params: {
+    substituteId: string;
+    schoolId: string;
+    weekday: Weekday;
+    timeSlotId: string;
+  }) {
+    const targetTimeSlot = await this.prisma.schoolTimeSlot.findUnique({
+      where: {
+        id: params.timeSlotId,
+      },
+    });
+    const targetTimeKey = this.getTimeKey(targetTimeSlot);
+
+    const substitute = await this.prisma.employee.findUnique({
+      where: {
+        id: params.substituteId,
+      },
+      include: {
+        assignments: {
+          where: {
+            active: true,
+          },
+        },
+        weeklySchedules: {
+          where: {
+            weekday: params.weekday,
+            active: true,
+          },
+          include: {
+            timeSlot: true,
+          },
+        },
+      },
+    });
+
+    if (!substitute || !substitute.active) {
+      throw new BadRequestException('Substituto invalido ou inativo.');
+    }
+
+    const isLinkedToSchool =
+      substitute.schoolId === params.schoolId ||
+      substitute.assignments.some((assignment) => assignment.schoolId === params.schoolId);
+
+    if (!isLinkedToSchool) {
+      throw new BadRequestException('Substituto nao esta vinculado a escola deste horario.');
+    }
+
+    const sameTimeSchedules = substitute.weeklySchedules.filter((schedule) =>
+      this.isSameTimeSlot(schedule, params.timeSlotId, targetTimeKey),
+    );
+    const busyInAnotherSchool = sameTimeSchedules.some(
+      (schedule) => schedule.schoolId !== params.schoolId,
+    );
+
+    if (busyInAnotherSchool) {
+      throw new BadRequestException('Substituto esta em outra escola neste horario.');
+    }
+  }
+
+  async getManagedSchoolIds(data: any = {}, substitutionId?: string) {
+    const substitution = substitutionId
+      ? await this.prisma.substitution.findUnique({
+          where: {
+            id: substitutionId,
+          },
+          include: {
+            absence: {
+              include: {
+                employee: true,
+              },
+            },
+            classSchedule: {
+              include: {
+                class: true,
+              },
+            },
+          },
+        })
+      : null;
+    const schoolIds: string[] = [];
+    const classScheduleId = data.classScheduleId ?? substitution?.classScheduleId;
+    const absenceId = data.absenceId ?? substitution?.absenceId;
+
+    if (classScheduleId) {
+      const classSchedule =
+        substitution?.classScheduleId === classScheduleId
+          ? substitution.classSchedule
+          : await this.prisma.classSchedule.findUnique({
+              where: {
+                id: classScheduleId,
+              },
+              include: {
+                class: true,
+              },
+            });
+
+      if (classSchedule?.class?.schoolId) {
+        return [classSchedule.class.schoolId];
+      }
+    }
+
+    if (absenceId) {
+      const absence =
+        substitution?.absenceId === absenceId
+          ? substitution.absence
+          : await this.prisma.absence.findUnique({
+              where: {
+                id: absenceId,
+              },
+              include: {
+                employee: true,
+              },
+            });
+
+      if (absence?.employee?.schoolId) {
+        schoolIds.push(absence.employee.schoolId);
+      }
+    }
+
+    return Array.from(new Set(schoolIds));
+  }
+
   async findAll() {
     await this.autoAcceptExpired();
 
@@ -207,6 +347,9 @@ export class SubstitutionsService {
       where: {
         id: data.absenceId,
       },
+      include: {
+        employee: true,
+      },
     });
 
     if (!absence) {
@@ -227,6 +370,27 @@ export class SubstitutionsService {
 
     if (!substitute || !substitute.active) {
       throw new BadRequestException('Substituto inválido ou inativo.');
+    }
+
+    const classSchedule = data.classScheduleId
+      ? await this.prisma.classSchedule.findUnique({
+          where: {
+            id: data.classScheduleId,
+          },
+          include: {
+            class: true,
+          },
+        })
+      : null;
+    const targetSchoolId = classSchedule?.class?.schoolId ?? absence.employee?.schoolId ?? null;
+
+    if (targetSchoolId) {
+      await this.assertSubstituteCanActInSchool({
+        substituteId: data.substituteTeacherId,
+        schoolId: targetSchoolId,
+        weekday: data.weekday,
+        timeSlotId: data.timeSlotId,
+      });
     }
 
     const substituteAbsence = await this.prisma.absence.findFirst({

@@ -22,6 +22,7 @@ type Assignment = {
     id: string;
     name: string;
   } | null;
+  school?: School | null;
 };
 
 type Employee = {
@@ -105,6 +106,7 @@ async function saveEmployee(data: {
   email?: string;
   phone?: string;
   schoolId?: string;
+  schoolIds?: string[];
   roleType?: string;
   subjectName?: string;
   subjectId?: string;
@@ -138,6 +140,28 @@ function getEmployeeSubject(employee: Employee) {
 
 function getEmployeeSubjectId(employee: Employee) {
   return employee.assignments?.find((assignment) => assignment.subject)?.subject?.id ?? '';
+}
+
+function getEmployeeSchoolIds(employee: Employee) {
+  return Array.from(
+    new Set(
+      [
+        employee.school?.id,
+        ...(employee.assignments?.map((assignment) => assignment.school?.id).filter(Boolean) ?? []),
+      ].filter(Boolean) as string[],
+    ),
+  );
+}
+
+function getEmployeeSchoolNames(employee: Employee) {
+  return Array.from(
+    new Set(
+      [
+        employee.school?.name,
+        ...(employee.assignments?.map((assignment) => assignment.school?.name).filter(Boolean) ?? []),
+      ].filter(Boolean) as string[],
+    ),
+  );
 }
 
 function getEmployeeFunction(employee: Employee) {
@@ -201,6 +225,7 @@ export default function EmployeesPage() {
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [schoolId, setSchoolId] = useState('');
+  const [additionalSchoolIds, setAdditionalSchoolIds] = useState<string[]>([]);
   const [roleType, setRoleType] = useState('PROFESSOR');
   const [subjectId, setSubjectId] = useState('');
   const [search, setSearch] = useState('');
@@ -343,6 +368,7 @@ export default function EmployeesPage() {
     setEmail('');
     setPhone('');
     setSchoolId('');
+    setAdditionalSchoolIds([]);
     setRoleType('PROFESSOR');
     setSubjectId('');
     setModalOpen(true);
@@ -354,7 +380,9 @@ export default function EmployeesPage() {
     setCpf(employee.cpf || '');
     setEmail(employee.email || '');
     setPhone(employee.phone || '');
-    setSchoolId(employee.school?.id || '');
+    const employeeSchoolIds = getEmployeeSchoolIds(employee);
+    setSchoolId(employeeSchoolIds[0] || employee.school?.id || '');
+    setAdditionalSchoolIds(employeeSchoolIds.slice(1, 5));
     setRoleType(employee.roleType || 'PROFESSOR');    
     setSubjectId(getEmployeeSubjectId(employee));
     setModalOpen(true);
@@ -368,6 +396,7 @@ export default function EmployeesPage() {
     setEmail('');
     setPhone('');
     setSchoolId('');
+    setAdditionalSchoolIds([]);
     setRoleType('PROFESSOR');  
     setSubjectId('');
 }
@@ -386,9 +415,31 @@ export default function EmployeesPage() {
       phone,
       roleType,
       schoolId: schoolId || undefined,
+      schoolIds: [schoolId, ...additionalSchoolIds].filter(Boolean),
       subjectId: subjectId || '',
       subjectName: subjects.find((subject) => subject.id === subjectId)?.name ?? '',
     });
+  }
+
+  function addSchoolField() {
+    if ([schoolId, ...additionalSchoolIds].filter(Boolean).length >= 5) {
+      alert('O servidor pode ser vinculado a no máximo 5 escolas.');
+      return;
+    }
+
+    setAdditionalSchoolIds((current) => [...current, '']);
+  }
+
+  function updateAdditionalSchool(index: number, value: string) {
+    setAdditionalSchoolIds((current) =>
+      current.map((school, currentIndex) => (currentIndex === index ? value : school)),
+    );
+  }
+
+  function removeAdditionalSchool(index: number) {
+    setAdditionalSchoolIds((current) =>
+      current.filter((_, currentIndex) => currentIndex !== index),
+    );
   }
 
   function handleDelete(employee: Employee) {
@@ -458,7 +509,7 @@ export default function EmployeesPage() {
               <thead>
                 <tr className="border-b">
                   <th className="text-left py-3">Nome</th>
-                  <th className="text-left py-3">Escola</th>
+                  <th className="text-left py-3">Escola(s)</th>
                   <th className="text-left py-3">Disciplina / função</th>
                   <th className="text-left py-3">Banco de horas</th>
                   <th className="text-right py-3">Ações</th>
@@ -486,7 +537,7 @@ export default function EmployeesPage() {
                   return (
                     <tr key={employee.id} className="border-b">
                       <td className="py-3 font-medium">{employee.name}</td>
-                      <td className="py-3">{employee.school?.name || '-'}</td>
+                      <td className="py-3">{getEmployeeSchoolNames(employee).join(', ') || '-'}</td>
                       <td className="py-3">{getEmployeeSubjectOrFunction(employee) || '-'}</td>
                       <td className="py-3">
                         <span
@@ -598,21 +649,72 @@ export default function EmployeesPage() {
                 />
               </div>
 
-              <div>
-                <label className="text-sm font-medium">Escola principal</label>
-                <select
-                  value={schoolId}
-                  onChange={(e) => setSchoolId(e.target.value)}
-                  className="mt-1 w-full border rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-300"
-                >
-                  <option value="">Selecione</option>
+              <div className="md:col-span-2">
+                <div className="flex items-center justify-between gap-3">
+                  <label className="text-sm font-medium">Escolas em que o servidor atua</label>
+                  <button
+                    type="button"
+                    onClick={addSchoolField}
+                    disabled={[schoolId, ...additionalSchoolIds].filter(Boolean).length >= 5}
+                    className="rounded-lg border px-3 py-1 text-xs hover:bg-slate-50 disabled:opacity-50"
+                  >
+                    + Escola
+                  </button>
+                </div>
 
-                  {schools.map((school) => (
-                    <option key={school.id} value={school.id}>
-                      {school.name}
-                    </option>
+                <div className="mt-1 grid gap-2">
+                  <select
+                    value={schoolId}
+                    onChange={(e) => {
+                      setSchoolId(e.target.value);
+                      setAdditionalSchoolIds((current) =>
+                        current.filter((item) => item !== e.target.value),
+                      );
+                    }}
+                    className="w-full border rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-300"
+                  >
+                    <option value="">Escola principal</option>
+
+                    {schools.map((school) => (
+                      <option key={school.id} value={school.id}>
+                        {school.name}
+                      </option>
+                    ))}
+                  </select>
+
+                  {additionalSchoolIds.map((additionalSchoolId, index) => (
+                    <div key={index} className="flex gap-2">
+                      <select
+                        value={additionalSchoolId}
+                        onChange={(e) => updateAdditionalSchool(index, e.target.value)}
+                        className="w-full border rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-300"
+                      >
+                        <option value="">Outra escola</option>
+                        {schools
+                          .filter(
+                            (school) =>
+                              school.id === additionalSchoolId ||
+                              ![schoolId, ...additionalSchoolIds].includes(school.id),
+                          )
+                          .map((school) => (
+                            <option key={school.id} value={school.id}>
+                              {school.name}
+                            </option>
+                          ))}
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => removeAdditionalSchool(index)}
+                        className="rounded-xl border border-red-200 px-3 py-2 text-xs text-red-700 hover:bg-red-50"
+                      >
+                        Remover
+                      </button>
+                    </div>
                   ))}
-                </select>
+                </div>
+                <p className="mt-1 text-xs text-slate-500">
+                  Informe até 5 escolas. A primeira será usada como escola principal.
+                </p>
               </div>
               <div>
                 <label className="text-sm font-medium">Disciplina lecionada</label>

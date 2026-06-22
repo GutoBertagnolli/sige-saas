@@ -31,7 +31,15 @@ export class AuditLogsService {
         where: { id: payload.sub },
         include: {
           role: true,
-          employee: true,
+          employee: {
+            include: {
+              assignments: {
+                where: {
+                  active: true,
+                },
+              },
+            },
+          },
         },
       });
     } catch {

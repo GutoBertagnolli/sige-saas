@@ -11,10 +11,28 @@ export class AvailabilityService {
     timeSlotId: string;
   }) {
     const { schoolId, weekday, timeSlotId } = params;
+    const targetTimeSlot = await this.prisma.schoolTimeSlot.findUnique({
+      where: {
+        id: timeSlotId,
+      },
+    });
+    const targetTimeKey = targetTimeSlot
+      ? `${targetTimeSlot.startTime}-${targetTimeSlot.endTime}`
+      : '';
 
     const employees = await this.prisma.employee.findMany({
       where: {
-        schoolId,
+        OR: [
+          { schoolId },
+          {
+            assignments: {
+              some: {
+                schoolId,
+                active: true,
+              },
+            },
+          },
+        ],
         active: true,
       },
       include: {
@@ -22,7 +40,6 @@ export class AvailabilityService {
         weeklySchedules: {
           where: {
             weekday,
-            timeSlotId,
             active: true,
           },
           include: {
@@ -36,14 +53,35 @@ export class AvailabilityService {
     });
 
     const result = employees.map((employee) => {
-      const schedule = employee.weeklySchedules[0];
+      const schedulesAtSameTime = employee.weeklySchedules.filter((schedule) => {
+        if (schedule.timeSlotId === timeSlotId) {
+          return true;
+        }
+
+        if (!targetTimeKey || !schedule.timeSlot) {
+          return false;
+        }
+
+        return `${schedule.timeSlot.startTime}-${schedule.timeSlot.endTime}` === targetTimeKey;
+      });
+      const busyInAnotherSchool = schedulesAtSameTime.some(
+        (schedule) => schedule.schoolId !== schoolId,
+      );
+      const schedule = schedulesAtSameTime.find(
+        (item) => item.schoolId === schoolId,
+      );
 
       let status = 'LIVRE';
       let canSubstitute = false;
       let priority = 99;
       let reason = 'Servidor não possui jornada cadastrada neste horário.';
 
-      if (schedule) {
+      if (busyInAnotherSchool) {
+        status = 'OCUPADO_OUTRA_ESCOLA';
+        canSubstitute = false;
+        priority = 90;
+        reason = 'Servidor esta em outra escola neste horário.';
+      } else if (schedule) {
         status = schedule.type;
 
         if (schedule.type === 'HORA_ATIVIDADE') {
