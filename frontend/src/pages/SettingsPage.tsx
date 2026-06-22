@@ -24,6 +24,7 @@ const ACCESS_LABELS: Record<string, string> = {
   DIRETOR: 'Direcao',
   ORIENTADOR: 'Orientador',
   SERVIDOR: 'Servidor',
+  INATIVO: 'Inativo',
 };
 
 async function getSettings() {
@@ -206,35 +207,53 @@ export default function SettingsPage() {
                 </tr>
               </thead>
               <tbody>
-                {accessUsers.map((user) => (
-                  <tr key={user.id} className="border-b">
-                    <td className="py-3">
-                      <div className="font-medium">{user.name}</div>
-                      <div className="text-xs text-slate-500">{user.roleType}</div>
-                    </td>
-                    <td className="py-3">{user.school?.name ?? '-'}</td>
-                    <td className="py-3">{user.loginEmail ?? 'Sem login gerado'}</td>
-                    <td className="py-3">
-                      <select
-                        value={user.accessProfile}
-                        disabled={!user.hasUser || updateAccessMutation.isPending}
-                        onChange={(event) =>
-                          updateAccessMutation.mutate({
-                            employeeId: user.id,
-                            accessProfile: event.target.value,
-                          })
-                        }
-                        className="w-48 rounded-xl border px-3 py-2 text-sm disabled:bg-slate-100"
-                      >
-                        {Object.entries(ACCESS_LABELS).map(([value, label]) => (
-                          <option key={value} value={value}>
-                            {label}
-                          </option>
-                        ))}
-                      </select>
-                    </td>
-                  </tr>
-                ))}
+                {accessUsers.map((user) => {
+                  const isInactive = user.accessProfile === 'INATIVO';
+
+                  return (
+                    <tr
+                      key={user.id}
+                      className={`border-b ${
+                        isInactive ? 'bg-slate-50 text-slate-500' : ''
+                      }`}
+                    >
+                      <td className="py-3">
+                        <div className="font-medium">{user.name}</div>
+                        <div className="text-xs text-slate-500">{user.roleType}</div>
+                      </td>
+                      <td className="py-3">{user.school?.name ?? '-'}</td>
+                      <td className="py-3">
+                        <div>{user.loginEmail ?? 'Sem login gerado'}</div>
+                        {isInactive && (
+                          <div className="mt-1 text-xs font-medium text-red-600">
+                            Acesso inativo
+                          </div>
+                        )}
+                      </td>
+                      <td className="py-3">
+                        <select
+                          value={user.accessProfile}
+                          disabled={!user.hasUser || updateAccessMutation.isPending}
+                          onChange={(event) =>
+                            updateAccessMutation.mutate({
+                              employeeId: user.id,
+                              accessProfile: event.target.value,
+                            })
+                          }
+                          className={`w-48 rounded-xl border px-3 py-2 text-sm disabled:bg-slate-100 ${
+                            isInactive ? 'border-red-200 bg-red-50 text-red-700' : ''
+                          }`}
+                        >
+                          {Object.entries(ACCESS_LABELS).map(([value, label]) => (
+                            <option key={value} value={value}>
+                              {label}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                    </tr>
+                  );
+                })}
 
                 {accessUsers.length === 0 && (
                   <tr>

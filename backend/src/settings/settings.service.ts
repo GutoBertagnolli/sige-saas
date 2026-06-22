@@ -24,7 +24,9 @@ const ACCESS_PROFILES = {
     roleName: 'SERVIDOR',
     description: 'Acesso restrito ao portal do servidor.',
   },
-};
+} as const;
+
+type AccessProfile = keyof typeof ACCESS_PROFILES | 'INATIVO';
 
 type SettingRow = {
   value: string;
@@ -137,6 +139,7 @@ export class SettingsService {
       accessProfile: this.inferAccessProfile(
         employee.user?.role?.name,
         employee.roleType,
+        employee.user?.active,
       ),
     }));
   }
@@ -165,15 +168,18 @@ export class SettingsService {
       );
     }
 
-    const role = await this.findOrCreateAccessRole(employee.tenantId, accessProfile);
+    const isInactiveProfile = accessProfile === 'INATIVO';
+    const role = isInactiveProfile
+      ? null
+      : await this.findOrCreateAccessRole(employee.tenantId, accessProfile);
 
     await this.prisma.user.update({
       where: {
         id: employee.userId,
       },
       data: {
-        roleId: role.id,
-        active: data.active ?? true,
+        ...(role ? { roleId: role.id } : {}),
+        active: isInactiveProfile ? false : data.active ?? true,
       },
     });
 
@@ -208,14 +214,20 @@ export class SettingsService {
   private normalizeAccessProfile(accessProfile?: string) {
     const value = String(accessProfile || 'SERVIDOR').toUpperCase();
 
-    if (!Object.keys(ACCESS_PROFILES).includes(value)) {
+    if (![...Object.keys(ACCESS_PROFILES), 'INATIVO'].includes(value)) {
       throw new BadRequestException('Perfil de acesso invalido.');
     }
 
-    return value as keyof typeof ACCESS_PROFILES;
+    return value as AccessProfile;
   }
 
-  private inferAccessProfile(roleName?: string | null, roleType?: string | null) {
+  private inferAccessProfile(
+    roleName?: string | null,
+    roleType?: string | null,
+    active = true,
+  ) {
+    if (!active) return 'INATIVO';
+
     if (roleName && Object.keys(ACCESS_PROFILES).includes(roleName)) {
       return roleName;
     }
