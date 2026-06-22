@@ -24,6 +24,8 @@ import {
   Camera,
   ChevronDown,
   Clock,
+  Eye,
+  EyeOff,
   GraduationCap,
   KeyRound,
   LogOut,
@@ -998,6 +1000,7 @@ function App() {
 function LoginPage({ onLogin }: { onLogin: (session: AuthSession) => void }) {
   const [email, setEmail] = React.useState('');
   const [password, setPassword] = React.useState('');
+  const [showPassword, setShowPassword] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState('');
 
@@ -1062,14 +1065,25 @@ function LoginPage({ onLogin }: { onLogin: (session: AuthSession) => void }) {
           </div>
           <div>
             <label className="text-sm font-medium">Senha</label>
-            <input
-              type="password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
-              autoComplete="current-password"
-              required
-            />
+            <div className="relative mt-1">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                className="w-full rounded-xl border px-3 py-2 pr-11 text-sm"
+                autoComplete="current-password"
+                required
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((current) => !current)}
+                className="absolute inset-y-0 right-0 flex w-11 items-center justify-center text-slate-500 hover:text-slate-900"
+                aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
+                title={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
+              >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
           </div>
           <button
             type="submit"
