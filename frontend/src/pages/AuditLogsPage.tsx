@@ -1,6 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
+import { CHANGELOG } from '../changelog';
 import { api } from '../services/api';
+import { APP_VERSION } from '../version';
 
 type AuditUser = {
   name: string;
@@ -95,7 +97,7 @@ function summarizeData(value: unknown) {
 
 export default function AuditLogsPage() {
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState<'sessions' | 'history'>('sessions');
+  const [activeTab, setActiveTab] = useState<'sessions' | 'history' | 'updates'>('updates');
 
   const { data: logs = [], isLoading, isError } = useQuery({
     queryKey: ['audit-logs'],
@@ -138,7 +140,7 @@ export default function AuditLogsPage() {
         <div className="mb-6">
           <h2 className="text-lg font-semibold">Logs do sistema</h2>
           <p className="text-sm text-slate-500">
-            Sessoes online, cadastros, edicoes, exclusoes, alteracoes de planner e horarios de login.
+            Sessoes online, historico de acoes e atualizacoes do SIGE.
           </p>
         </div>
 
@@ -151,6 +153,14 @@ export default function AuditLogsPage() {
               }`}
             >
               Online
+            </button>
+            <button
+              onClick={() => setActiveTab('updates')}
+              className={`rounded-lg px-4 py-2 text-sm font-medium ${
+                activeTab === 'updates' ? 'bg-slate-900 text-white' : 'text-slate-600'
+              }`}
+            >
+              Atualizacoes
             </button>
             <button
               onClick={() => setActiveTab('history')}
@@ -244,6 +254,52 @@ export default function AuditLogsPage() {
               </table>
             </div>
           )
+        ) : activeTab === 'updates' ? (
+          <div className="space-y-5">
+            <div className="rounded-2xl border bg-slate-50 p-5">
+              <p className="text-sm text-slate-500">Versao atual instalada</p>
+              <div className="mt-1 flex flex-wrap items-end gap-3">
+                <h3 className="text-3xl font-semibold text-slate-950">{APP_VERSION}</h3>
+                <span className="pb-1 text-sm text-slate-500">
+                  Consulte abaixo as principais modificacoes e melhorias.
+                </span>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              {CHANGELOG.map((entry) => (
+                <article key={entry.version} className="rounded-2xl border p-5">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="rounded-full bg-slate-900 px-3 py-1 text-xs font-semibold text-white">
+                          v{entry.version}
+                        </span>
+                        {entry.version === APP_VERSION && (
+                          <span className="rounded-full bg-green-50 px-3 py-1 text-xs font-semibold text-green-700">
+                            Atual
+                          </span>
+                        )}
+                      </div>
+                      <h3 className="mt-3 text-base font-semibold text-slate-950">
+                        {entry.title}
+                      </h3>
+                    </div>
+                    <span className="text-sm text-slate-500">{entry.date}</span>
+                  </div>
+
+                  <ul className="mt-4 space-y-2 text-sm text-slate-600">
+                    {entry.changes.map((change) => (
+                      <li key={change} className="flex gap-2">
+                        <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-slate-400" />
+                        <span>{change}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </article>
+              ))}
+            </div>
+          </div>
         ) : isLoading ? (
           <div className="text-sm text-slate-500">Carregando logs...</div>
         ) : isError ? (
