@@ -45,6 +45,8 @@ type WeeklySchedule = {
   weekday: string;
   type: string;
   timeSlotId: string;
+  schoolId?: string | null;
+  school?: { id: string; name: string } | null;
   classId?: string | null;
   class?: {
     id: string;
@@ -66,6 +68,7 @@ type LocalCell = {
   weekday: string;
   timeSlotId: string;
   slotTimeKey: string;
+  schoolId: string;
   classId: string;
   room: string;
   type: string;
@@ -87,6 +90,7 @@ const WEEKDAYS = [
 const TYPES = [
   { value: 'AULA', label: 'Aula' },
   { value: 'HORA_ATIVIDADE', label: 'Hora atividade' },
+  { value: 'HORA_ATIVIDADE_HIBRIDA', label: 'Hora atividade hibrida' },
   { value: 'APOIO', label: 'Apoio' },
   { value: 'SUPERVISAO', label: 'Supervisão' },
   { value: 'ALMOCO_SONO', label: 'Almoço/Sono' },
@@ -96,11 +100,18 @@ const TYPES = [
 const TYPE_COLORS: Record<string, string> = {
   AULA: 'bg-blue-600 text-white border-blue-700',
   HORA_ATIVIDADE: 'bg-yellow-400 text-black border-yellow-500',
+  HORA_ATIVIDADE_HIBRIDA: 'bg-amber-500 text-black border-amber-600',
   APOIO: 'bg-purple-600 text-white border-purple-700',
   SUPERVISAO: 'bg-pink-600 text-white border-pink-700',
   ALMOCO_SONO: 'bg-green-600 text-white border-green-700',
   ADMINISTRATIVO: 'bg-slate-700 text-white border-slate-800',
 };
+
+const CLASSLESS_TYPES = new Set(['HORA_ATIVIDADE', 'HORA_ATIVIDADE_HIBRIDA']);
+
+function isClasslessType(type?: string | null) {
+  return CLASSLESS_TYPES.has(String(type || '').toUpperCase());
+}
 
 function getEmployeeSubject(employee?: Employee) {
   return employee?.assignments?.find((assignment) => assignment.subject)?.subject ?? null;
@@ -213,6 +224,10 @@ export default function EmployeePlannerPage() {
   const employeeSchools = useMemo(() => getEmployeeSchools(employee), [employee]);
   const employeeSchoolIds = useMemo(
     () => new Set(employeeSchools.map((school) => school.id)),
+    [employeeSchools],
+  );
+  const employeeSchoolById = useMemo(
+    () => new Map(employeeSchools.map((school) => [school.id, school])),
     [employeeSchools],
   );
 
@@ -347,8 +362,9 @@ export default function EmployeePlannerPage() {
       weekday: item.weekday,
       timeSlotId: item.timeSlotId,
       slotTimeKey: getSlotTimeKey(item.timeSlot) || getSlotTimeKey(allSlotsById.get(item.timeSlotId)),
-      classId: item.classId ?? item.class?.id ?? '',
-      room: item.room ?? '',
+      schoolId: item.schoolId ?? item.school?.id ?? item.class?.school?.id ?? '',
+      classId: isClasslessType(item.type) ? '' : item.classId ?? item.class?.id ?? '',
+      room: isClasslessType(item.type) ? '' : item.room ?? '',
       type: item.type,
       subject: item.subject ?? employeeSubject?.name ?? '',
       requiresSubstitution: item.requiresSubstitution ?? true,
@@ -431,8 +447,18 @@ export default function EmployeePlannerPage() {
 
     if (existing) return;
 
-    if (!defaultClassId) {
+    const defaultClassSchoolId = classById.get(defaultClassId)?.school?.id ?? '';
+    const defaultSchoolId =
+      defaultClassSchoolId || (employeeSchools.length === 1 ? employeeSchools[0]?.id : '') || '';
+    const classlessType = isClasslessType(defaultType);
+
+    if (!classlessType && !defaultClassId) {
       alert('Selecione uma turma padrao antes de marcar horarios.');
+      return;
+    }
+
+    if (!defaultSchoolId) {
+      alert('Selecione uma turma padrao para identificar a escola do horario.');
       return;
     }
 
@@ -442,7 +468,8 @@ export default function EmployeePlannerPage() {
         weekday,
         timeSlotId: slot.id,
         slotTimeKey: getSlotTimeKey(slot),
-        classId: defaultClassId,
+        schoolId: defaultSchoolId,
+        classId: classlessType ? '' : defaultClassId,
         room: '',
         type: defaultType,
         subject: employeeSubject?.name ?? '',
@@ -463,11 +490,19 @@ export default function EmployeePlannerPage() {
   function updateCellType(weekday: string, slot: Slot, type: string) {
     const existing = findCell(weekday, slot);
     if (!existing) return;
+    const classSchoolId = classById.get(existing.classId)?.school?.id ?? '';
+    const classlessType = isClasslessType(type);
 
     setLocalCells((prev) =>
       prev.map((item) =>
         item.weekday === existing.weekday && item.timeSlotId === existing.timeSlotId
-          ? { ...item, type }
+          ? {
+              ...item,
+              type,
+              schoolId: item.schoolId || classSchoolId,
+              classId: classlessType ? '' : item.classId,
+              room: classlessType ? '' : item.room,
+            }
           : item,
       ),
     );
@@ -480,7 +515,7 @@ export default function EmployeePlannerPage() {
     setLocalCells((prev) =>
       prev.map((item) =>
         item.weekday === existing.weekday && item.timeSlotId === existing.timeSlotId
-          ? { ...item, classId }
+          ? { ...item, classId, schoolId: classById.get(classId)?.school?.id ?? item.schoolId }
           : item,
       ),
     );
@@ -518,8 +553,18 @@ export default function EmployeePlannerPage() {
   function buildCellsForSlots(slotsToFill: Slot[]) {
     const newCells: LocalCell[] = [];
 
-    if (!defaultClassId) {
+    const defaultClassSchoolId = classById.get(defaultClassId)?.school?.id ?? '';
+    const defaultSchoolId =
+      defaultClassSchoolId || (employeeSchools.length === 1 ? employeeSchools[0]?.id : '') || '';
+    const classlessType = isClasslessType(defaultType);
+
+    if (!classlessType && !defaultClassId) {
       alert('Selecione uma turma padrao antes de preencher horarios.');
+      return newCells;
+    }
+
+    if (!defaultSchoolId) {
+      alert('Selecione uma turma padrao para identificar a escola do horario.');
       return newCells;
     }
 
@@ -529,7 +574,8 @@ export default function EmployeePlannerPage() {
           weekday: day.key,
           timeSlotId: slot.id,
           slotTimeKey: getSlotTimeKey(slot),
-          classId: defaultClassId,
+          schoolId: defaultSchoolId,
+          classId: classlessType ? '' : defaultClassId,
           room: '',
           type: defaultType,
           subject: employeeSubject?.name ?? '',
@@ -636,14 +682,16 @@ export default function EmployeePlannerPage() {
       return;
     }
 
-    if (localCells.some((cell) => !cell.classId)) {
+    if (localCells.some((cell) => !isClasslessType(cell.type) && !cell.classId)) {
       alert('Todos os horarios marcados precisam estar vinculados a uma turma.');
       return;
     }
 
-    const cellWithoutSchool = localCells.find((cell) => !classById.get(cell.classId)?.school?.id);
+    const cellWithoutSchool = localCells.find(
+      (cell) => !(cell.schoolId || classById.get(cell.classId)?.school?.id),
+    );
     if (cellWithoutSchool) {
-      alert('Todas as turmas do planner precisam estar vinculadas a uma escola.');
+      alert('Todos os horarios do planner precisam estar vinculados a uma escola.');
       return;
     }
 
@@ -656,15 +704,15 @@ export default function EmployeePlannerPage() {
     const items = uniqueCells.map((cell) => ({
       tenantId: TENANT_ID,
       employeeId,
-      schoolId: classById.get(cell.classId)?.school?.id,
-      classId: cell.classId,
+      schoolId: cell.schoolId || classById.get(cell.classId)?.school?.id,
+      classId: isClasslessType(cell.type) ? null : cell.classId,
       timeSlotId: cell.timeSlotId,
       weekday: cell.weekday,
       type: cell.type,
       subjectId: employeeSubject?.id ?? null,
       subject: cell.subject || employeeSubject?.name || null,
       functionName: cell.type === 'AULA' ? 'Professor' : cell.type,
-      room: cell.room || null,
+      room: isClasslessType(cell.type) ? null : cell.room || null,
       requiresSubstitution: cell.requiresSubstitution,
     }));
 
@@ -814,6 +862,8 @@ export default function EmployeePlannerPage() {
                       const cell = findCell(day.key, slot);
                       const active = Boolean(cell);
                       const cellClass = getCellClass(cell);
+                      const cellSchool = cellClass?.school ?? employeeSchoolById.get(cell?.schoolId ?? '');
+                      const classFieldsLocked = isClasslessType(cell?.type);
 
                       return (
                         <td key={day.key} className="p-2 border-r text-center">
@@ -836,7 +886,7 @@ export default function EmployeePlannerPage() {
                                     TYPES.find((type) => type.value === cell?.type)?.label ||
                                       cell?.type,
                                     cellClass?.name,
-                                    cellClass?.school?.name,
+                                    cellSchool?.name,
                                     cell?.subject || employeeSubject?.name || null,
                                     cell?.room ? `Sala ${cell.room}` : null,
                                   ]
@@ -849,10 +899,11 @@ export default function EmployeePlannerPage() {
                               <>
                                 <select
                                   value={cell?.classId}
+                                  disabled={classFieldsLocked}
                                   onChange={(e) =>
                                     updateCellClass(day.key, slot, e.target.value)
                                   }
-                                  className="w-full border rounded-lg px-1 py-1 text-[10px]"
+                                  className="w-full border rounded-lg px-1 py-1 text-[10px] disabled:bg-slate-100 disabled:text-slate-400"
                                 >
                                   <option value="">Turma</option>
                                   {visibleClassOptions.map((item) => (
@@ -878,10 +929,11 @@ export default function EmployeePlannerPage() {
 
                                 <input
                                   value={cell?.room ?? ''}
+                                  disabled={classFieldsLocked}
                                   onChange={(e) =>
                                     updateCellRoom(day.key, slot, e.target.value)
                                   }
-                                  className="w-full border rounded-lg px-1 py-1 text-[10px]"
+                                  className="w-full border rounded-lg px-1 py-1 text-[10px] disabled:bg-slate-100 disabled:text-slate-400"
                                   placeholder="Sala"
                                 />
                               </>

@@ -7,6 +7,16 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.4.59',
+    date: '25/06/2026',
+    title: 'Hora atividade no planner',
+    changes: [
+      'Campos de turma e sala ficam bloqueados quando o tipo for Hora atividade.',
+      'Adicionada a opcao Hora atividade hibrida.',
+      'Hora atividade e Hora atividade hibrida salvam sem turma e sem sala, mantendo a escola vinculada ao horario.',
+    ],
+  },
+  {
     version: '0.4.58',
     date: '25/06/2026',
     title: 'Historico de logs mais leve',
