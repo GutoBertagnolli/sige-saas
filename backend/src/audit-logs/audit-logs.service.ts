@@ -137,20 +137,42 @@ export class AuditLogsService {
   async findAll(authorization?: string) {
     await this.assertCanView(authorization);
 
-    return this.prisma.auditLog.findMany({
-      include: {
+    const logs = await this.prisma.auditLog.findMany({
+      select: {
+        id: true,
+        entity: true,
+        entityId: true,
+        action: true,
+        ipAddress: true,
+        createdAt: true,
         user: {
-          include: {
-            role: true,
-            employee: true,
+          select: {
+            name: true,
+            email: true,
+            role: {
+              select: {
+                name: true,
+              },
+            },
+            employee: {
+              select: {
+                roleType: true,
+              },
+            },
           },
         },
       },
       orderBy: {
         createdAt: 'desc',
       },
-      take: 500,
+      take: 250,
     });
+
+    return logs.map((log) => ({
+      ...log,
+      oldData: null,
+      newData: null,
+    }));
   }
 
   async findOnlineSessions(authorization?: string) {

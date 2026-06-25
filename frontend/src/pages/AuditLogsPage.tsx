@@ -77,8 +77,8 @@ function formatDateTime(value: string) {
   });
 }
 
-function summarizeData(value: unknown) {
-  if (!value || typeof value !== 'object') return '-';
+function summarizeData(value: unknown, fallback = '-') {
+  if (!value || typeof value !== 'object') return fallback;
 
   const data = value as Record<string, any>;
   const summary = [
@@ -92,7 +92,7 @@ function summarizeData(value: unknown) {
     data.totalItems !== undefined ? `${data.totalItems} itens` : null,
   ].filter(Boolean);
 
-  return summary.length > 0 ? summary.join(' | ') : 'Registro atualizado';
+  return summary.length > 0 ? summary.join(' | ') : fallback;
 }
 
 export default function AuditLogsPage() {
@@ -332,7 +332,9 @@ export default function AuditLogsPage() {
                       </span>
                     </td>
                     <td className="px-3 py-3">{log.entity}</td>
-                    <td className="px-3 py-3 text-slate-600">{summarizeData(log.newData)}</td>
+                    <td className="px-3 py-3 text-slate-600">
+                      {summarizeData(log.newData, `${ACTION_LABELS[log.action] ?? log.action} em ${log.entity}`)}
+                    </td>
                     <td className="px-3 py-3 text-slate-500">{log.ipAddress ?? '-'}</td>
                   </tr>
                 ))}

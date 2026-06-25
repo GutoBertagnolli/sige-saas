@@ -7,6 +7,16 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.4.58',
+    date: '25/06/2026',
+    title: 'Historico de logs mais leve',
+    changes: [
+      'O historico de logs passou a carregar apenas os dados necessarios para a tabela.',
+      'Reduzido o peso da consulta para evitar tela presa em carregamento.',
+      'Mantido resumo simples quando o detalhe completo do registro nao for carregado.',
+    ],
+  },
+  {
     version: '0.4.57',
     date: '25/06/2026',
     title: 'Atualizacoes compactas',
