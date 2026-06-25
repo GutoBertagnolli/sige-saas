@@ -268,35 +268,34 @@ export default function AuditLogsPage() {
 
             <div className="space-y-3">
               {CHANGELOG.map((entry) => (
-                <article key={entry.version} className="rounded-2xl border p-5">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="rounded-full bg-slate-900 px-3 py-1 text-xs font-semibold text-white">
-                          v{entry.version}
-                        </span>
-                        {entry.version === APP_VERSION && (
-                          <span className="rounded-full bg-green-50 px-3 py-1 text-xs font-semibold text-green-700">
-                            Atual
-                          </span>
-                        )}
-                      </div>
-                      <h3 className="mt-3 text-base font-semibold text-slate-950">
-                        {entry.title}
-                      </h3>
+                <details key={entry.version} className="group rounded-2xl border">
+                  <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-5 py-4 marker:hidden">
+                    <div className="flex items-center gap-3">
+                      <span className="font-semibold text-slate-950">v{entry.version}</span>
+                      {entry.version === APP_VERSION && (
+                        <span className="h-2 w-2 rounded-full bg-green-500" />
+                      )}
                     </div>
-                    <span className="text-sm text-slate-500">{entry.date}</span>
-                  </div>
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm text-slate-500">{entry.date}</span>
+                      <span className="text-sm text-slate-400 transition group-open:rotate-90">
+                        &gt;
+                      </span>
+                    </div>
+                  </summary>
 
-                  <ul className="mt-4 space-y-2 text-sm text-slate-600">
-                    {entry.changes.map((change) => (
-                      <li key={change} className="flex gap-2">
-                        <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-slate-400" />
-                        <span>{change}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </article>
+                  <div className="border-t px-5 py-4">
+                    <h3 className="text-base font-semibold text-slate-950">{entry.title}</h3>
+                    <ul className="mt-3 space-y-2 text-sm text-slate-600">
+                      {entry.changes.map((change) => (
+                        <li key={change} className="flex gap-2">
+                          <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-slate-400" />
+                          <span>{change}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </details>
               ))}
             </div>
           </div>

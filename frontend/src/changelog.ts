@@ -7,6 +7,16 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.4.57',
+    date: '25/06/2026',
+    title: 'Atualizacoes compactas',
+    changes: [
+      'A tela de Atualizacoes passou a mostrar inicialmente apenas versao e data.',
+      'As descricoes ficaram recolhidas em formato drill down.',
+      'Ao expandir uma versao, o sistema mostra o titulo e os detalhes da melhoria.',
+    ],
+  },
+  {
     version: '0.4.56',
     date: '25/06/2026',
     title: 'Historico de atualizacoes',
