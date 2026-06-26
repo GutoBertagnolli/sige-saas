@@ -12,6 +12,7 @@ import ClassesPage from './pages/ClassesPage';
 import SchoolsPage from './pages/SchoolsPage';
 import SettingsPage from './pages/SettingsPage';
 import AnnouncementsPage from './pages/AnnouncementsPage';
+import DashboardPage from './pages/DashboardPage';
 import PortalPage from './pages/PortalPage';
 import ReportsPage from './pages/ReportsPage';
 import AuditLogsPage from './pages/AuditLogsPage';
@@ -459,7 +460,7 @@ function Layout({
         <div className="flex-1">
         <Routes>
           <Route path="/servidores/:employeeId/planner" element={<EmployeePlannerPage />} />
-          <Route path="/dashboard" element={<DashboardHome />} />
+          <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/mensagens" element={<AnnouncementsPage />} />
   	  <Route path="/escolas" element={<SchoolsPage />} />          
           <Route path="/turmas" element={<ClassesPage />} />

@@ -7,6 +7,16 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.4.61',
+    date: '26/06/2026',
+    title: 'Dashboard operacional',
+    changes: [
+      'Dashboard passou a carregar um resumo operacional consolidado pelo backend.',
+      'Adicionados cards de substituicoes, afastamentos, escolas com pendencia e servidores indisponiveis.',
+      'Criadas secoes de atencao necessaria, agenda do dia, ranking por escola, fluxo de substituicoes e ultimas atividades.',
+    ],
+  },
+  {
     version: '0.4.60',
     date: '26/06/2026',
     title: 'Ultimo acesso no controle de acessos',

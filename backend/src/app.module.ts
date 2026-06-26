@@ -17,11 +17,13 @@ import { AnnouncementsModule } from './announcements/announcements.module';
 import { SubjectsModule } from './subjects/subjects.module';
 import { AuditLogsModule } from './audit-logs/audit-logs.module';
 import { WhatsAppModule } from './whatsapp/whatsapp.module';
+import { DashboardModule } from './dashboard/dashboard.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     AuditLogsModule,
+    DashboardModule,
     AvailabilityModule,
     AnnouncementsModule,
     EmployeeWeeklySchedulesModule,
