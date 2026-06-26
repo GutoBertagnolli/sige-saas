@@ -7,6 +7,15 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.4.60',
+    date: '26/06/2026',
+    title: 'Ultimo acesso no controle de acessos',
+    changes: [
+      'Controle de acessos passou a mostrar data e hora do ultimo login.',
+      'Usuarios que ainda nao acessaram aparecem como Nunca acessou.',
+    ],
+  },
+  {
     version: '0.4.59',
     date: '25/06/2026',
     title: 'Hora atividade no planner',

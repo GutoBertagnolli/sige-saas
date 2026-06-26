@@ -12,6 +12,7 @@ type AccessUser = {
   name: string;
   roleType?: string;
   loginEmail?: string | null;
+  lastLogin?: string | null;
   hasUser: boolean;
   accessProfile: string;
   school?: {
@@ -50,6 +51,15 @@ async function updateAccess(data: { employeeId: string; accessProfile: string })
     },
   );
   return response.data;
+}
+
+function formatLastLogin(value?: string | null) {
+  if (!value) return 'Nunca acessou';
+
+  return new Date(value).toLocaleString('pt-BR', {
+    dateStyle: 'short',
+    timeStyle: 'short',
+  });
 }
 
 export default function SettingsPage() {
@@ -203,6 +213,7 @@ export default function SettingsPage() {
                   <th className="text-left py-3">Servidor</th>
                   <th className="text-left py-3">Escola</th>
                   <th className="text-left py-3">Login</th>
+                  <th className="text-left py-3">Ultimo acesso</th>
                   <th className="text-left py-3">Perfil de acesso</th>
                 </tr>
               </thead>
@@ -227,6 +238,14 @@ export default function SettingsPage() {
                         {isInactive && (
                           <div className="mt-1 text-xs font-medium text-red-600">
                             Acesso inativo
+                          </div>
+                        )}
+                      </td>
+                      <td className="py-3">
+                        <div>{formatLastLogin(user.lastLogin)}</div>
+                        {!user.lastLogin && (
+                          <div className="mt-1 text-xs text-slate-400">
+                            Login ainda nao utilizado
                           </div>
                         )}
                       </td>
@@ -257,7 +276,7 @@ export default function SettingsPage() {
 
                 {accessUsers.length === 0 && (
                   <tr>
-                    <td colSpan={4} className="py-6 text-center text-slate-500">
+                    <td colSpan={5} className="py-6 text-center text-slate-500">
                       Nenhum servidor cadastrado.
                     </td>
                   </tr>

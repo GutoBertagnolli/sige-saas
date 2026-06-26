@@ -135,6 +135,7 @@ export class SettingsService {
       roleType: employee.roleType,
       school: employee.school,
       loginEmail: employee.loginEmail ?? employee.user?.email ?? null,
+      lastLogin: employee.user?.lastLogin ?? null,
       hasUser: Boolean(employee.userId),
       accessProfile: this.inferAccessProfile(
         employee.user?.role?.name,
