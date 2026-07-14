@@ -7,6 +7,15 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.4.62',
+    date: '14/07/2026',
+    title: 'Remocao da previa de layout',
+    changes: [
+      'Removido o menu Previa layout.',
+      'Removida a rota interna de pre-visualizacao experimental.',
+    ],
+  },
+  {
     version: '0.4.61',
     date: '26/06/2026',
     title: 'Dashboard operacional',
