@@ -12,7 +12,9 @@ export class AbsencesController {
   ) {}
 
   private assertCanManageSchools(actor: any, schoolIds: string[]) {
-    if (schoolIds.length === 0) return;
+    if (schoolIds.length === 0) {
+      throw new ForbiddenException('Nao foi possivel determinar a escola do afastamento.');
+    }
 
     const roleName = String(actor?.role?.name || '').toUpperCase();
     const roleType = String(actor?.employee?.roleType || '').toUpperCase();
@@ -32,7 +34,7 @@ export class AbsencesController {
       ].filter(Boolean),
     );
 
-    if (!schoolIds.some((schoolId) => actorSchoolIds.has(schoolId))) {
+    if (!schoolIds.every((schoolId) => actorSchoolIds.has(schoolId))) {
       throw new ForbiddenException('Voce so pode gerenciar afastamentos das escolas em que atua.');
     }
   }
@@ -62,8 +64,10 @@ export class AbsencesController {
   }
 
   @Get(':id/replacements')
-  getReplacements(@Param('id') id: string) {
-  return this.service.getReplacementSuggestions(id);
+  async getReplacements(@Param('id') id: string, @Headers('authorization') authorization?: string) {
+    const actor = await this.audit.getActor(authorization);
+    this.assertCanManageSchools(actor, await this.service.getManagedSchoolIds({}, id));
+    return this.service.getReplacementSuggestions(id);
   }
 
   @Delete(':id')
