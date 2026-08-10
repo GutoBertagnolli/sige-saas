@@ -1,6 +1,7 @@
 import { Body, Controller, Delete, ForbiddenException, Get, Headers, Param, Post, Put, Req } from '@nestjs/common';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { getClientIp } from '../common/client-ip';
+import { PrismaService } from '../common/prisma.service';
 import { getSchoolScope } from '../common/school-scope';
 import { EmployeesService } from './employees.service';
 
@@ -9,6 +10,7 @@ export class EmployeesController {
   constructor(
     private readonly service: EmployeesService,
     private readonly audit: AuditLogsService,
+    private readonly prisma: PrismaService,
   ) {}
 
   private getRequestedSchoolIds(body: any) {
@@ -18,7 +20,7 @@ export class EmployeesController {
           .map((item) => (typeof item === 'string' ? item.trim() : ''))
           .filter(Boolean),
       ),
-    );
+    ) as string[];
   }
 
   private normalizeAccessText(value?: string | null) {
@@ -32,11 +34,7 @@ export class EmployeesController {
     const roleName = this.normalizeAccessText(actor?.role?.name);
     const roleType = this.normalizeAccessText(actor?.employee?.roleType);
 
-    return (
-      roleType === 'SECRETARIA' ||
-      roleName.includes('ADMIN') ||
-      roleName.includes('SECRETARIA')
-    );
+    return roleType === 'SECRETARIA' || roleName.includes('ADMIN') || roleName.includes('SECRETARIA');
   }
 
   private getActorSchoolIds(actor: any) {
@@ -48,15 +46,42 @@ export class EmployeesController {
     );
   }
 
+  private async assertTenantAndSchools(actor: any, body: any) {
+    if (!actor?.tenantId) throw new ForbiddenException('Sessao sem cliente associado.');
+
+    const schoolIds = this.getRequestedSchoolIds(body);
+    if (!schoolIds.length) return;
+
+    const count = await this.prisma.school.count({
+      where: {
+        id: { in: schoolIds },
+        tenantId: actor.tenantId,
+      },
+    });
+
+    if (count !== schoolIds.length) {
+      throw new ForbiddenException('Uma ou mais escolas nao pertencem ao seu cliente.');
+    }
+  }
+
+  private async assertEmployeeTenant(actor: any, id: string) {
+    const employee = await this.prisma.employee.findUnique({
+      where: { id },
+      select: { tenantId: true },
+    });
+
+    if (!employee || employee.tenantId !== actor?.tenantId) {
+      throw new ForbiddenException('Servidor nao encontrado.');
+    }
+  }
+
   private assertCanManageRequestedSchools(actor: any, body: any, currentSchoolIds: string[] = []) {
     const requestedSchoolIds = this.getRequestedSchoolIds(body);
     if (requestedSchoolIds.length === 0) return;
 
     const roleType = this.normalizeAccessText(actor?.employee?.roleType);
 
-    if (this.isFullAccessActor(actor)) {
-      return;
-    }
+    if (this.isFullAccessActor(actor)) return;
 
     if (!['DIRETOR', 'ORIENTADOR'].includes(roleType)) {
       throw new ForbiddenException('Apenas Direcao, Orientacao, Secretaria e Administradores podem cadastrar servidores.');
@@ -84,8 +109,9 @@ export class EmployeesController {
   @Post()
   async create(@Body() body: any, @Headers('authorization') authorization: string | undefined, @Req() request: any) {
     const actor = await this.audit.getActor(authorization);
+    await this.assertTenantAndSchools(actor, body);
     this.assertCanManageRequestedSchools(actor, body);
-    const result = await this.service.create(body);
+    const result = await this.service.create({ ...body, tenantId: actor.tenantId });
     await this.audit.record({ authorization, entity: 'Servidor', entityId: result?.id, action: 'CREATE', newData: result, ipAddress: getClientIp(request) });
     return result;
   }
@@ -93,15 +119,21 @@ export class EmployeesController {
   @Put(':id')
   async update(@Param('id') id: string, @Body() body: any, @Headers('authorization') authorization: string | undefined, @Req() request: any) {
     const actor = await this.audit.getActor(authorization);
+    await this.assertEmployeeTenant(actor, id);
+    await this.assertTenantAndSchools(actor, body);
     const currentSchoolIds = await this.service.getAssignedSchoolIds(id);
     this.assertCanManageRequestedSchools(actor, body, currentSchoolIds);
-    const result = await this.service.update(id, body);
+    const result = await this.service.update(id, { ...body, tenantId: actor.tenantId });
     await this.audit.record({ authorization, entity: 'Servidor', entityId: id, action: 'UPDATE', oldData: body, newData: result, ipAddress: getClientIp(request) });
     return result;
   }
 
   @Post(':id/access')
   async generateAccess(@Param('id') id: string, @Headers('authorization') authorization: string | undefined, @Req() request: any) {
+    const actor = await this.audit.getActor(authorization);
+    await this.assertEmployeeTenant(actor, id);
+    const currentSchoolIds = await this.service.getAssignedSchoolIds(id);
+    this.assertCanManageRequestedSchools(actor, { schoolIds: currentSchoolIds }, currentSchoolIds);
     const result = await this.service.generateAccess(id);
     await this.audit.record({ authorization, entity: 'Servidor', entityId: id, action: 'GENERATE_ACCESS', newData: result, ipAddress: getClientIp(request) });
     return result;
@@ -109,6 +141,10 @@ export class EmployeesController {
 
   @Delete(':id')
   async remove(@Param('id') id: string, @Headers('authorization') authorization: string | undefined, @Req() request: any) {
+    const actor = await this.audit.getActor(authorization);
+    await this.assertEmployeeTenant(actor, id);
+    const currentSchoolIds = await this.service.getAssignedSchoolIds(id);
+    this.assertCanManageRequestedSchools(actor, { schoolIds: currentSchoolIds }, currentSchoolIds);
     const result = await this.service.remove(id);
     await this.audit.record({ authorization, entity: 'Servidor', entityId: id, action: 'DELETE', newData: result, ipAddress: getClientIp(request) });
     return result;
