@@ -2,6 +2,7 @@ import { Body, Controller, Get, Headers, Post, Put, Req } from '@nestjs/common';
 import { IsEmail, IsOptional, IsString, MinLength } from 'class-validator';
 import { getClientIp } from '../common/client-ip';
 import { AuthService } from './auth.service';
+import { Public } from './public.decorator';
 
 class LoginDto {
   @IsEmail() email: string;
@@ -24,6 +25,7 @@ class UpdatePasswordDto {
 export class AuthController {
   constructor(private auth: AuthService) {}
 
+  @Public()
   @Post('login')
   login(@Body() dto: LoginDto, @Req() request: any) {
     return this.auth.login(
@@ -43,6 +45,11 @@ export class AuthController {
   @Post('heartbeat')
   heartbeat(@Headers('authorization') authorization?: string) {
     return this.auth.heartbeat(authorization);
+  }
+
+  @Post('logout')
+  logout(@Headers('authorization') authorization?: string) {
+    return this.auth.logout(authorization);
   }
 
   @Put('profile')
