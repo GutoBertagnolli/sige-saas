@@ -16,6 +16,18 @@ export function setAuthToken(token: string) {
 }
 
 export function clearAuthToken() {
+  const token = getAuthToken();
+
+  if (token) {
+    fetch('/api/auth/logout', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      keepalive: true,
+    }).catch(() => undefined);
+  }
+
   localStorage.removeItem(AUTH_TOKEN_KEY);
 }
 
