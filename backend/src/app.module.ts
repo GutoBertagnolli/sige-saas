@@ -6,6 +6,7 @@ import { AnnouncementsModule } from './announcements/announcements.module';
 import { AuditLogsModule } from './audit-logs/audit-logs.module';
 import { AuthGuard } from './auth/auth.guard';
 import { AuthModule } from './auth/auth.module';
+import { RolesGuard } from './auth/roles.guard';
 import { AvailabilityModule } from './availability/availability.module';
 import { ClassesModule } from './classes/classes.module';
 import { PrismaModule } from './common/prisma.module';
@@ -47,6 +48,10 @@ import { WhatsAppModule } from './whatsapp/whatsapp.module';
     {
       provide: APP_GUARD,
       useClass: AuthGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: RolesGuard,
     },
   ],
 })
