@@ -19,6 +19,21 @@ export class AuthService {
     };
   }
 
+  private getVerifiedPayload(authorization?: string) {
+    const token = authorization?.replace(/^Bearer\s+/i, '').trim();
+    if (!token) throw new UnauthorizedException('Sessao expirada. Entre novamente.');
+
+    try {
+      const payload: any = this.jwt.verify(token);
+      if (!payload?.sub || !payload?.sid || !payload?.tenantId) {
+        throw new UnauthorizedException('Sessao expirada. Entre novamente.');
+      }
+      return payload;
+    } catch {
+      throw new UnauthorizedException('Sessao expirada. Entre novamente.');
+    }
+  }
+
   async login(
     email: string,
     password: string,
@@ -37,14 +52,8 @@ export class AuthService {
           include: {
             school: true,
             assignments: {
-              where: {
-                active: true,
-              },
-              include: {
-                school: true,
-                function: true,
-                subject: true,
-              },
+              where: { active: true },
+              include: { school: true, function: true, subject: true },
             },
           },
         },
@@ -73,13 +82,11 @@ export class AuthService {
         entity: 'Auth',
         entityId: user.id,
         action: 'LOGIN',
-        newData: {
-          email: user.email,
-          name: user.name,
-        },
+        newData: { email: user.email, name: user.name },
         ipAddress: ipAddress || null,
       },
     });
+
     const token = this.jwt.sign({
       sub: user.id,
       tenantId: tenant.id,
@@ -87,35 +94,18 @@ export class AuthService {
       email: user.email,
       sid: tokenId,
     });
-    return {
-      token,
-      user: this.buildUserResponse(user),
-      tenant,
-    };
+
+    return { token, user: this.buildUserResponse(user), tenant };
   }
 
   async me(authorization?: string) {
-    const token = authorization?.replace(/^Bearer\s+/i, '').trim();
-    if (!token) throw new UnauthorizedException('Sessao expirada. Entre novamente.');
-
-    let payload: any;
-    try {
-      payload = this.jwt.verify(token);
-    } catch {
-      throw new UnauthorizedException('Sessao expirada. Entre novamente.');
-    }
-
-    if (!payload.sid) {
-      throw new UnauthorizedException('Sessao expirada. Entre novamente.');
-    }
+    const payload = this.getVerifiedPayload(authorization);
 
     const activeSession = await this.prisma.userSession.findUnique({
-      where: {
-        tokenId: payload.sid,
-      },
+      where: { tokenId: payload.sid },
     });
 
-    if (!activeSession || activeSession.revokedAt) {
+    if (!activeSession || activeSession.revokedAt || activeSession.userId !== payload.sub) {
       throw new UnauthorizedException('Sessao expirada. Entre novamente.');
     }
 
@@ -128,42 +118,58 @@ export class AuthService {
           include: {
             school: true,
             assignments: {
-              where: {
-                active: true,
-              },
-              include: {
-                school: true,
-                function: true,
-                subject: true,
-              },
+              where: { active: true },
+              include: { school: true, function: true, subject: true },
             },
           },
         },
       },
     });
 
-    if (!user || !user.active || !user.tenant.active) {
+    if (
+      !user ||
+      !user.active ||
+      !user.tenant.active ||
+      user.tenantId !== payload.tenantId
+    ) {
       throw new UnauthorizedException('Sessao expirada. Entre novamente.');
     }
 
     await this.prisma.userSession.update({
-      where: {
-        tokenId: payload.sid,
-      },
-      data: {
-        lastSeenAt: new Date(),
-      },
+      where: { tokenId: payload.sid },
+      data: { lastSeenAt: new Date() },
     });
 
-    return {
-      user: this.buildUserResponse(user),
-      tenant: user.tenant,
-    };
+    return { user: this.buildUserResponse(user), tenant: user.tenant };
   }
 
   async heartbeat(authorization?: string) {
     await this.me(authorization);
     return { ok: true };
+  }
+
+  async logout(authorization?: string) {
+    const payload = this.getVerifiedPayload(authorization);
+
+    await this.prisma.userSession.updateMany({
+      where: {
+        tokenId: payload.sid,
+        userId: payload.sub,
+        revokedAt: null,
+      },
+      data: { revokedAt: new Date() },
+    });
+
+    await this.prisma.auditLog.create({
+      data: {
+        userId: payload.sub,
+        entity: 'Auth',
+        entityId: payload.sub,
+        action: 'LOGOUT',
+      },
+    });
+
+    return { success: true };
   }
 
   async updateProfile(authorization: string | undefined, data: { photoUrl?: string | null }) {
@@ -175,11 +181,7 @@ export class AuthService {
       data: {
         photoUrl: data.photoUrl || null,
         employee: session.user.employee
-          ? {
-              update: {
-                photoUrl: data.photoUrl || null,
-              },
-            }
+          ? { update: { photoUrl: data.photoUrl || null } }
           : undefined,
       },
       include: {
@@ -189,24 +191,15 @@ export class AuthService {
           include: {
             school: true,
             assignments: {
-              where: {
-                active: true,
-              },
-              include: {
-                school: true,
-                function: true,
-                subject: true,
-              },
+              where: { active: true },
+              include: { school: true, function: true, subject: true },
             },
           },
         },
       },
     });
 
-    return {
-      user: this.buildUserResponse(user),
-      tenant: user.tenant,
-    };
+    return { user: this.buildUserResponse(user), tenant: user.tenant };
   }
 
   async updatePassword(
@@ -217,6 +210,7 @@ export class AuthService {
       throw new UnauthorizedException('Informe a senha atual e uma nova senha com pelo menos 6 caracteres.');
     }
 
+    const payload = this.getVerifiedPayload(authorization);
     const session = await this.me(authorization);
     const user = await this.prisma.user.findUnique({ where: { id: session.user.id } });
     if (!user || !user.active) throw new UnauthorizedException('Sessao expirada. Entre novamente.');
@@ -224,10 +218,27 @@ export class AuthService {
     const ok = await bcrypt.compare(data.currentPassword, user.passwordHash);
     if (!ok) throw new UnauthorizedException('Senha atual invalida.');
 
-    await this.prisma.user.update({
-      where: { id: user.id },
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: user.id },
+        data: { passwordHash: await bcrypt.hash(data.newPassword, 10) },
+      }),
+      this.prisma.userSession.updateMany({
+        where: {
+          userId: user.id,
+          tokenId: { not: payload.sid },
+          revokedAt: null,
+        },
+        data: { revokedAt: new Date() },
+      }),
+    ]);
+
+    await this.prisma.auditLog.create({
       data: {
-        passwordHash: await bcrypt.hash(data.newPassword, 10),
+        userId: user.id,
+        entity: 'Auth',
+        entityId: user.id,
+        action: 'PASSWORD_CHANGE',
       },
     });
 
