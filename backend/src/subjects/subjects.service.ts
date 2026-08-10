@@ -1,102 +1,52 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../common/prisma.service';
 
 @Injectable()
 export class SubjectsService {
   constructor(private prisma: PrismaService) {}
 
-  private async resolveTenantId(tenantId?: string) {
-    if (tenantId) {
-      const tenant = await this.prisma.tenant.findFirst({
-        where: {
-          id: tenantId,
-          active: true,
-        },
-      });
-
-      if (tenant) {
-        return tenant.id;
-      }
-    }
-
-    const defaultTenant = await this.prisma.tenant.findFirst({
-      where: {
-        slug: 'suportiva',
-        active: true,
-      },
-    });
-
-    if (defaultTenant) {
-      return defaultTenant.id;
-    }
-
-    const firstActiveTenant = await this.prisma.tenant.findFirst({
-      where: {
-        active: true,
-      },
-      orderBy: {
-        createdAt: 'asc',
-      },
-    });
-
-    if (!firstActiveTenant) {
-      throw new BadRequestException('Nenhum tenant ativo encontrado para cadastrar a disciplina.');
-    }
-
-    return firstActiveTenant.id;
-  }
-
-  findAll() {
+  findAll(tenantId: string) {
     return this.prisma.subject.findMany({
       where: {
+        tenantId,
         active: true,
       },
-      orderBy: {
-        name: 'asc',
-      },
+      orderBy: { name: 'asc' },
     });
   }
 
-  async create(data: { tenantId?: string; name: string; color?: string }) {
+  async create(data: { tenantId: string; name: string; color?: string }) {
     const name = data.name?.trim();
 
-    if (!name) {
-      throw new BadRequestException('Informe o nome da disciplina.');
-    }
-
-    const tenantId = await this.resolveTenantId(data.tenantId);
+    if (!name) throw new BadRequestException('Informe o nome da disciplina.');
 
     const existing = await this.prisma.subject.findFirst({
-      where: {
-        tenantId,
-        name,
-      },
+      where: { tenantId: data.tenantId, name },
     });
 
     if (existing) {
       if (!existing.active) {
         return this.prisma.subject.update({
           where: { id: existing.id },
-          data: {
-            active: true,
-            color: data.color || existing.color,
-          },
+          data: { active: true, color: data.color || existing.color },
         });
       }
-
       throw new BadRequestException('Já existe uma disciplina cadastrada com este nome.');
     }
 
     return this.prisma.subject.create({
-      data: {
-        tenantId,
-        name,
-        color: data.color || null,
-      },
+      data: { tenantId: data.tenantId, name, color: data.color || null },
     });
   }
 
-  update(id: string, data: { name?: string; color?: string | null; active?: boolean }) {
+  private async assertTenant(id: string, tenantId: string) {
+    const subject = await this.prisma.subject.findFirst({ where: { id, tenantId } });
+    if (!subject) throw new NotFoundException('Disciplina nao encontrada.');
+    return subject;
+  }
+
+  async update(id: string, tenantId: string, data: { name?: string; color?: string | null; active?: boolean }) {
+    await this.assertTenant(id, tenantId);
     return this.prisma.subject.update({
       where: { id },
       data: {
@@ -107,12 +57,11 @@ export class SubjectsService {
     });
   }
 
-  remove(id: string) {
+  async remove(id: string, tenantId: string) {
+    await this.assertTenant(id, tenantId);
     return this.prisma.subject.update({
       where: { id },
-      data: {
-        active: false,
-      },
+      data: { active: false },
     });
   }
 }
